@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
 
-import vector_search_mcp.log.log_settings as log_settings
+import vector_search_util.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
 
 class LangChainOpenAIClient(BaseModel):

@@ -3,7 +3,7 @@ from typing import Optional, ClassVar, Any
 import os
 
 
-import vector_search_mcp.log.log_settings as log_settings
+import vector_search_util.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
 
 class EmbeddingData(BaseModel):

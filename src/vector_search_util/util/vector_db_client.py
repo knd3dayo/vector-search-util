@@ -3,14 +3,14 @@ from langchain.docstore.document import Document
 
 from pydantic import BaseModel, Field
 
-from vector_search_mcp.langchain.langchain_vector_db import LangChainVectorDB
-from vector_search_mcp.model.models import EmbeddingData
-from vector_search_mcp.langchain.langchain_vector_db_chroma import LangChainVectorDBChroma
-from vector_search_mcp.langchain.langchain_vector_db_pgvector import LangChainVectorDBPGVector
-from vector_search_mcp.langchain.langchain_client import LangChainOpenAIClient
-from vector_search_mcp.model.models import VectorDBItemBase, VectorSearchRequest
+from vector_search_util.langchain.langchain_vector_db import LangChainVectorDB
+from vector_search_util.model.models import EmbeddingData
+from vector_search_util.langchain.langchain_vector_db_chroma import LangChainVectorDBChroma
+from vector_search_util.langchain.langchain_vector_db_pgvector import LangChainVectorDBPGVector
+from vector_search_util.langchain.langchain_client import LangChainOpenAIClient
+from vector_search_util.model.models import VectorDBItemBase, VectorSearchRequest
 
-import vector_search_mcp.log.log_settings as log_settings
+import vector_search_util.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
 
 class VectorDBClient(BaseModel):

@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 import sqlalchemy
 from sqlalchemy.sql import text
 from langchain_core.vectorstores import VectorStore
-from vector_search_mcp.langchain.langchain_vector_db import LangChainVectorDB
+from vector_search_util.langchain.langchain_vector_db import LangChainVectorDB
 
-import vector_search_mcp.log.log_settings as log_settings
+import vector_search_util.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
     
 class LangChainVectorDBPGVector(LangChainVectorDB):

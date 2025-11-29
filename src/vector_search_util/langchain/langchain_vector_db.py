@@ -10,10 +10,10 @@ from langchain_core.vectorstores import VectorStore
 
 from openai import RateLimitError
 
-from vector_search_mcp.langchain.langchain_client import LangChainOpenAIClient
-from vector_search_mcp.model.models import EmbeddingData
+from vector_search_util.langchain.langchain_client import LangChainOpenAIClient
+from vector_search_util.model.models import EmbeddingData
 
-import vector_search_mcp.log.log_settings as log_settings
+import vector_search_util.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
 
 
