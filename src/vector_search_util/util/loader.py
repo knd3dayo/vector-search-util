@@ -46,6 +46,7 @@ class EmbeddingBatchClient:
         self, file_path: str, content_column: str, source_id_column: str, metadata_columns: list[str]
     ) -> list[EmbeddingData]:
         df = pd.read_excel(file_path)
+        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
         return self.create_data_from_dataframe(df, content_column, source_id_column, metadata_columns)
 
 

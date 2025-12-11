@@ -3,13 +3,13 @@ pydantic
 
 
 # For Langchain
-langchain==0.3.4
-langchain-openai==0.2.3
-langchain-community==0.3.3
+langchain
+langchain-openai
+langchain-community
 langchain-chroma
-langchain_postgres
-chroma-hnswlib==0.7.3
-chromadb==0.5.0
+langchain-postgres
+chroma-hnswlib
+chromadb
 
 
 # For MCP
