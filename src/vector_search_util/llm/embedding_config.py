@@ -6,6 +6,15 @@ class EmbeddingConfig:
 
     def __init__(self):
         load_dotenv()
+
+        # 並列度の設定
+        self.concurrency: int = int(os.getenv("EMBEDDING_CONCURRENCY","16"))
+        
+        self.app_data_path: str = os.getenv("APP_DATA_PATH","work/app_data")
+
+        self.source_id_key: str = os.getenv("SOURCE_ID_KEY","source_id")
+        self.category_key: str = os.getenv("CATEGORY_KEY","category")
+        
         self.vector_db_type: str = os.getenv("VECTOR_DB_TYPE","chroma")
         self.vector_db_url: str = os.getenv("VECTOR_DB_URL", "work/chroma_db")
         self.vector_db_collection_name: str = os.getenv("VECTOR_DB_COLLECTION_NAME","")

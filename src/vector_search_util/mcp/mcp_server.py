@@ -1,30 +1,116 @@
-
-import os, sys
 import asyncio
-from typing import Annotated, Optional, Any
+from typing import Annotated, Any
 from dotenv import load_dotenv
 import argparse
 from fastmcp import FastMCP
 from pydantic import Field
-from langchain.docstore.document import Document
-from vector_search_util.langchain.langchain_client import LangchainClient
-from vector_search_util.langchain.langchain_vector_db import LangChainVectorDB
+from langchain_core.documents import Document
+from vector_search_util.util.search import vector_search as vector_search_tool
+from vector_search_util.util.client import EmbeddingClient, EmbeddingData, CategoryData
 from vector_search_util.llm.embedding_config import EmbeddingConfig
 
+    
 mcp = FastMCP("vector_search_util") #type :ignore
 
 async def vector_search(
     query: Annotated[str, Field(description="The query string to search for in the vector database.")],
+    category: Annotated[str, Field(default="", description="The category to filter the search results.")]= "",
+    filter: Annotated[dict[str, list[str]], Field(default={}, description="Optional filter to apply to the search results.")]= {},
     num_results: Annotated[int, Field(description="The number of results to return.", ge=1, le=100)] = 5,
-    filter: Annotated[Optional[dict[str, Any]], Field(description="Optional filter to apply to the search results.")]= {},
 ) -> Annotated[list[Document], Field(description="A list of documents matching the search query.")]: 
-    config = EmbeddingConfig()
-    client = LangchainClient.create_client(config)
-    vector_db = LangChainVectorDB.create_vector_db(client)
-    if filter is None:
-        filter = {}
-    return await vector_db.vector_search(query, k=num_results, filter=filter)
+    """Perform a vector search in the vector database.
 
+    Args:
+        query (str): The query string to search for in the vector database.
+        category (str, optional): The category to filter the search results. Defaults to "".
+        filter (dict, optional): Optional filter to apply to the search results. Defaults to {}.
+        num_results (int): The number of results to return.
+    Returns:
+        list[Document]: A list of documents matching the search query.
+    """
+    results = await vector_search_tool(query, category, filter, num_results)
+    return results    
+
+# update documents
+async def update_documents(data_list: Annotated[list[EmbeddingData], Field(description="A list of documents to update embeddings for.")]):
+    """Update embeddings for a list of documents in the vector database.
+
+    Args:
+        data_list (list[Document]): A list of documents to update embeddings for.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.update_documents(data_list)
+
+# delete documents
+async def delete_documents(source_id_list: Annotated[list[str], Field(description="A list of source IDs of documents to delete.")]):
+    """Delete documents from the vector database based on a list of source IDs.
+
+    Args:
+        source_id_list (list[str]): A list of source IDs of documents to delete.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.delete_documents_by_source_ids(source_id_list)
+
+# get documents
+async def get_documents(
+    tags: Annotated[dict[str, list[str]], Field(description="A list of tags to filter documents by.")]= {},
+) -> Annotated[list[Document], Field(description="A list of documents retrieved from the vector database.")]:
+    """Retrieve documents from the vector database based on a list of source IDs.
+
+    Args:
+        tags (dict[str, Any]): A list of tags to filter documents by.
+    Returns:
+        list[Document]: A list of documents retrieved from the vector database.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    _, documents = await embedding_client.get_documents(tags)
+    return documents
+
+# update category
+async def update_categories(
+    categories: Annotated[list[CategoryData], Field(description="The list of categories to update.")],
+):
+    """Update a category in the vector database.
+
+    Args:
+        categories (list[CategoryData]): The list of categories to update.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.update_categories(categories)
+
+# delete category
+async def delete_categories(
+    name_list: Annotated[list[str], Field(description="The list of category names to delete.")],
+):
+    """Delete categories from the vector database based on a list of category names.
+
+    Args:
+        name_list (list[str]): The list of category names to delete.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.delete_categories(name_list)
+
+# get category
+async def get_categories(
+    ) -> Annotated[list[CategoryData], Field(description="The list of categories retrieved from the vector database.")]:
+    """Retrieve all categories from the vector database.
+    Returns:
+        list[CategoryData]: The list of categories retrieved from the vector database.
+    """
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    categories = await embedding_client.get_categories()
+    return categories
 
 # 引数解析用の関数
 def parse_args() -> argparse.Namespace:
@@ -63,6 +149,12 @@ async def main():
     else:
         # デフォルトのツールを登録
         mcp.tool()(vector_search)
+        mcp.tool()(update_documents)
+        mcp.tool()(delete_documents)
+        mcp.tool()(get_documents)
+        mcp.tool()(update_categories)
+        mcp.tool()(delete_categories)
+        mcp.tool()(get_categories)
 
     if mode == "stdio":
         await mcp.run_async()

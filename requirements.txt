@@ -20,3 +20,6 @@ tqdm
 pandas
 openpyxl
 xlsxwriter
+
+# sqlite
+aiosqlite

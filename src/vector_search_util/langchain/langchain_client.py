@@ -1,8 +1,3 @@
-
-import os
-
-# 抽象クラス
-from abc import ABC, abstractmethod
 from langchain_core.embeddings import Embeddings
 
 from langchain_openai import AzureOpenAIEmbeddings

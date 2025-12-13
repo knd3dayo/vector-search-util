@@ -9,6 +9,7 @@ logger = log_settings.getLogger(__name__)
 class EmbeddingData(BaseModel):
     content: str
     source_id: str
+    category: str = ""
     metadata : dict[str, Any] = Field(default_factory=dict)
     
 class VectorSearchRequest(BaseModel):
