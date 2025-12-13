@@ -38,6 +38,9 @@ async def main():
     delete_parser.add_argument("-f","--filter_file", type=str, help="Path to JSON file containing filter conditions.")
     delete_parser.add_argument("--source_id_column", type=str, default="source_id", help="Name of the source_id column.")
 
+    # list_category サブコマンド
+    list_category_parser = subparsers.add_parser("list_category", help="List all categories in the vector DB.")
+
     # load_category サブコマンド
     category_load_parser = subparsers.add_parser("load_category", help="Load categories from Excel file to vector DB.")
     category_load_parser.add_argument("-i", "--input_file_path", type=str, help="Path to the Excel file.")
@@ -113,6 +116,12 @@ async def main():
             tags = json.load(open(filter_file, "r", encoding="utf-8"))
         await embedding_loader.delete_documents_from_excel(input_file_path, source_id_column, tags)
 
+    elif args.command == "list_categories":
+        categories = await category_loader.list_categories()
+        print("\n=== Categories in Vector DB ===")
+        for i, cat in enumerate(categories, start=1):
+            print(f"[{i}] Name: {cat.name}, Description: {cat.description}")
+            
     elif args.command == "load_category":
         input_file_path = args.input_file_path
         if not input_file_path:

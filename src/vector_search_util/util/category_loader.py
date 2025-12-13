@@ -1,5 +1,5 @@
 from vector_search_util.llm.embedding_config import EmbeddingConfig
-from vector_search_util.util.client import EmbeddingClient, CategoryBatchClient
+from vector_search_util.util.client import EmbeddingClient, CategoryBatchClient, CategoryData
 
 async def delete_category(input_file_path: str, name_column: str):
 
@@ -28,3 +28,11 @@ async def load_category(input_file_path: str, name_column: str, description_colu
         input_file_path, name_column, description_column
     )
 
+async def list_categories() -> list[CategoryData]:
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    
+    categories = await embedding_client.list_categories()
+
+    return categories
