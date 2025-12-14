@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 from vector_search_util.core.client import (
     EmbeddingClient, EmbeddingBatchClient, RelationBatchClient, CategoryBatchClient, TagBatchClient
 )   
-from vector_search_util.model import EmbeddingConfig, ConditionContainer, EmbeddingData, CategoryData, RelationData, TagData
+from vector_search_util.model import EmbeddingConfig, ConditionContainer, SourceDocumentData, CategoryData, RelationData, TagData
 
 app = FastAPI()
 
@@ -49,7 +49,7 @@ async def vector_search(
     category: Annotated[str, "The category to filter the search by."] = "",
     filter: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer(),
     num_results: Annotated[int, "The number of results to return."] = 5,
-) -> list[EmbeddingData]:
+) -> list[SourceDocumentData]:
     
     """Perform a vector search in the vector database.
 
@@ -72,7 +72,7 @@ async def get_documents(
     source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
     category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
     filter: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
-) -> list[EmbeddingData]:
+) -> list[SourceDocumentData]:
     """Retrieve documents from the vector database based on a list of source IDs.
 
     Args:
@@ -90,12 +90,12 @@ async def get_documents(
 # upsert documents
 @app.post("/upsert_documents")
 async def upsert_documents(
-    data_list: Annotated[list[EmbeddingData], "A list of documents to update embeddings for."]
+    data_list: Annotated[list[SourceDocumentData], "A list of documents to update embeddings for."]
 ):
     """Update embeddings for a list of documents in the vector database.
 
     Args:
-        data_list (list[EmbeddingData]): A list of documents to update embeddings for.
+        data_list (list[SourceDocumentData]): A list of documents to update embeddings for.
     """
 
     config = EmbeddingConfig()

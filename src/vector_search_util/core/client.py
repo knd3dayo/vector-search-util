@@ -6,7 +6,7 @@ import pandas as pd
 from pandas import DataFrame
 from langchain_core.documents import Document
 from vector_search_util.model import (
-    CategoryData, RelationData, TagData, ConditionContainer, EmbeddingConfig, EmbeddingData, SourceDocumentData
+    CategoryData, RelationData, TagData, ConditionContainer, EmbeddingConfig, SourceDocumentData, SourceDocumentData
 )
 from vector_search_util._internal.db import SQLiteClient
 
@@ -32,9 +32,9 @@ class EmbeddingClient:
         results = await self.vector_db.vector_search(query, category, condition, top_k)
         return results
     
-    async def vector_search(self, query: str, category: str = "", condition: ConditionContainer = ConditionContainer(), top_k: int = 5) -> list[EmbeddingData]:
+    async def vector_search(self, query: str, category: str = "", condition: ConditionContainer = ConditionContainer(), top_k: int = 5) -> list[SourceDocumentData]:
         results = await self.vector_db.vector_search(query, category, condition, top_k)
-        return EmbeddingData.from_langchain_documents(results, self.sqlite_client .get_content_by_source_id)
+        return SourceDocumentData.from_langchain_documents(results, self.sqlite_client.get_content_by_source_id)
 
     async def get_langchain_documents(
             self,
@@ -56,20 +56,20 @@ class EmbeddingClient:
             source_ids: list[str] = [],
             category_ids: list[str] = [],
             condition: ConditionContainer = ConditionContainer()
-            ) -> tuple[list[str], list[EmbeddingData]]:
+            ) -> tuple[list[str], list[SourceDocumentData]]:
 
         ids, results = await self.get_langchain_documents(source_ids, category_ids, condition)
-        return ids, EmbeddingData.from_langchain_documents(results, self.sqlite_client.get_content_by_source_id)
+        return ids, SourceDocumentData.from_langchain_documents(results, self.sqlite_client.get_content_by_source_id)
     
-    async def upsert_documents(self, data_list: list[EmbeddingData]):
+    async def upsert_documents(self, data_list: list[SourceDocumentData]):
         # source_documentsに新規ドキュメントがあれば追加
-        await self.sqlite_client.upsert_source_documents([SourceDocumentData.from_embedding_data(data) for data in data_list])
+        await self.sqlite_client.upsert_source_documents(data_list)
         # data_listのcategoryのsetを取得して、カテゴリDBに存在しない場合は追加する
         data_list_category_names_set = set([data.category for data in data_list if data.category is not None])
         # data_listのmetadataのkeyのsetを取得して、タグDBに存在しない場合は追加する
-        data_list_metadata_keys_set = set([key for data in data_list for key in data.metadata.keys() if key is not None])
+        data_list_metadata_keys_set = set([key for data in data_list for key in data.tags.keys() if key is not None])
 
-        await self.vector_db.upsert_documents(EmbeddingData.to_langchain_documents(data_list))
+        await self.vector_db.upsert_documents(SourceDocumentData.to_langchain_documents(data_list))
 
         # metadataに新規カテゴリがあれば追加
         await self.sqlite_client.upsert_new_categories(data_list_category_names_set)
@@ -138,12 +138,12 @@ class EmbeddingBatchClient:
     def __init__(self, embedding_client: EmbeddingClient):
         self.embedding_client = embedding_client
 
-    async def _process_row_(self, row_num: int, data: EmbeddingData, progress: tqdm_asyncio) -> int:
+    async def _process_row_(self, row_num: int, data: SourceDocumentData, progress: tqdm_asyncio) -> int:
         await self.embedding_client.upsert_documents([data])
         progress.update(1)
         return row_num
 
-    async def update(self, data_list: list[EmbeddingData]):
+    async def update(self, data_list: list[SourceDocumentData]):
         progress = tqdm_asyncio(total=len(data_list), desc="progress")
         progress.bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
 
@@ -155,8 +155,8 @@ class EmbeddingBatchClient:
 
     def __create_documents_from_dataframe__(
         self, df: DataFrame, content_column: str, source_id_column: str, category_column: str, metadata_columns: list[str]
-    ) -> list[EmbeddingData]:
-        data_list: list[EmbeddingData] = []
+    ) -> list[SourceDocumentData]:
+        data_list: list[SourceDocumentData] = []
         for _, row in df.iterrows():
             content = row.get(content_column, "")
             source_id = row.get(source_id_column, "")
@@ -164,7 +164,7 @@ class EmbeddingBatchClient:
             if not content or not source_id:
                 continue
             metadata = {key: row.get(key, "") for key in metadata_columns}
-            data = EmbeddingData(source_content=str(content), source_id=str(source_id), category=str(category), metadata=metadata)
+            data = SourceDocumentData(source_content=str(content), source_id=str(source_id), category=str(category), tags=metadata)
             data_list.append(data)
         return data_list
 

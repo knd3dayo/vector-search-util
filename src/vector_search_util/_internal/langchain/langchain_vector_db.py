@@ -42,7 +42,8 @@ class LangChainVectorDB(ABC):
     def _create_search_kwargs_(self, k: int, conditions: ConditionContainer = ConditionContainer()) -> dict[str, Any]:
         search_kwargs: dict[str, Any] = {"k": k}
         filter = conditions.build()
-        search_kwargs["filter"] = filter
+        if filter:
+            search_kwargs["filter"] = filter
         return search_kwargs
 
     @classmethod

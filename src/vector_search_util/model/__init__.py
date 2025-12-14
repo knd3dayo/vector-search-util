@@ -1,5 +1,6 @@
-import os
+import os, json
 from dotenv import load_dotenv
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Optional, ClassVar, Any, Callable
 from datetime import datetime, timezone
@@ -19,7 +20,9 @@ class EmbeddingConfig:
         self.source_content_key: str = os.getenv("SOURCE_CONTENT_KEY","source_content")
         self.category_key: str = os.getenv("CATEGORY_KEY","category")
         self.updated_at_key: str = os.getenv("UPDATED_AT_KEY","updated_at")
+        self.extended_properties_key: str = os.getenv("EXTENDED_PROPERTIES_KEY","extended_properties")
         self.sequence_id_key: str = os.getenv("SEQUENCE_ID_KEY","sequence_id")
+        self.tags_key: str = os.getenv("TAGS_KEY","tags")
 
         # ベクトル化する際にSOURCE_CONTENTを分割する。その際のチャンクサイズ
         self.chunk_size: int = int(os.getenv("CHUNK_SIZE","4000"))
@@ -52,37 +55,6 @@ class EmbeddingConfig:
             self.endpoint: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT","")
 
 
-# source_document_data
-class SourceDocumentData(BaseModel):
-    embedding_config: ClassVar[EmbeddingConfig | None]  = None
-    source_id: str
-    source_content: str
-    extended_properties : dict[str, Any] = Field(default_factory=dict)
-
-    @classmethod
-    def get_embedding_config(cls) -> EmbeddingConfig:
-        if cls.embedding_config is None:
-            cls.embedding_config = EmbeddingConfig()
-        return cls.embedding_config
-
-    @classmethod
-    def from_embedding_data(cls, embedding_data: "EmbeddingData") -> "SourceDocumentData":
-        # source_id, categoryをmetadataに含める
-        source_id_key = cls.get_embedding_config().source_id_key
-        category_key = cls.get_embedding_config().category_key
-        updated_at_key = cls.get_embedding_config().updated_at_key
-
-        metadata = embedding_data.metadata.copy()
-        metadata[source_id_key] = embedding_data.source_id
-        metadata[category_key] = embedding_data.category
-        metadata[updated_at_key] = embedding_data.updated_at.isoformat()
-
-        return SourceDocumentData(
-            source_id=embedding_data.source_id,
-            source_content=embedding_data.source_content,
-            extended_properties=metadata
-        )
-
 # category_data
 class CategoryData(BaseModel):
     name: str
@@ -105,7 +77,7 @@ class TagData(BaseModel):
     description: str
 
 
-class EmbeddingData(BaseModel):
+class SourceDocumentData(BaseModel):
 
     embedding_config: ClassVar[EmbeddingConfig | None]  = None
 
@@ -113,10 +85,17 @@ class EmbeddingData(BaseModel):
     source_content: str
     category: str = ""
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata : dict[str, Any] = Field(default_factory=dict)
+    extended_properties : dict[str, Any] = Field(default_factory=dict)
+    tags : dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def to_langchain_documents(cls, data_list: list["EmbeddingData"]) -> list[Document]:
+    def _get_embedding_config_(cls) -> EmbeddingConfig:
+        if cls.embedding_config is None:
+            cls.embedding_config = EmbeddingConfig()
+        return cls.embedding_config
+
+    @classmethod
+    def to_langchain_documents(cls, data_list: list["SourceDocumentData"]) -> list[Document]:
         """Convert to Langchain Document."""
         documents: list[Document] = []
         for data in data_list:
@@ -124,72 +103,84 @@ class EmbeddingData(BaseModel):
             documents.extend(docs)
         return documents
 
-
     @classmethod
-    def __to_langchain_documents_from_single__(cls, data: "EmbeddingData") -> list[Document]:
+    def __to_langchain_documents_from_single__(cls, data: "SourceDocumentData") -> list[Document]:
         """Convert to Langchain Document."""
-        if EmbeddingData.embedding_config is None:
-            EmbeddingData.embedding_config = EmbeddingConfig()
+        embedding_config = cls._get_embedding_config_()
         documents: list[Document] = []
 
         # chunkingに基づいて、source_contentを分割する
-        chunk_size = EmbeddingData.embedding_config.chunk_size
-
+        chunk_size = embedding_config.chunk_size
         updated_at_str = data.updated_at.isoformat()
 
         page_countents = [data.source_content[i:i+chunk_size] for i in range(0, len(data.source_content), chunk_size)]
 
         for i in range(len(page_countents)):
-            metadata = data.metadata.copy()
             page_content = page_countents[i]
             # metadataにsequence_idを追加
             doc = Document(
                 page_content=page_content,
                 metadata={
-                    EmbeddingData.embedding_config.source_id_key: data.source_id,
-                    EmbeddingData.embedding_config.category_key: data.category,
-                    EmbeddingData.embedding_config.updated_at_key: updated_at_str,
-                    EmbeddingData.embedding_config.sequence_id_key: i,
-                    **metadata
+                    embedding_config.source_id_key: data.source_id,
+                    embedding_config.category_key: data.category,
+                    embedding_config.updated_at_key: updated_at_str,
+                    embedding_config.sequence_id_key: i,
+                    embedding_config.extended_properties_key: json.dumps(data.extended_properties, ensure_ascii=False),
+                    **data.tags
                 }
             )
             documents.append(doc)
         return documents
 
     @classmethod
-    def from_langchain_documents(cls, documents: list[Document], get_source_content_function: Callable) -> list["EmbeddingData"]:
-        if EmbeddingData.embedding_config is None:
-            EmbeddingData.embedding_config = EmbeddingConfig()
+    def from_langchain_documents(cls, documents: list[Document], get_source_content_function: Callable) -> list["SourceDocumentData"]:
+        embedding_config = cls._get_embedding_config_()
 
-        first_sequence_docs = [doc for doc in documents if doc.metadata.get(EmbeddingData.embedding_config.sequence_id_key, 0) == 0]
-        data_list: list[EmbeddingData] = []
+        first_sequence_docs = [doc for doc in documents if doc.metadata.get(embedding_config.sequence_id_key, 0) == 0]
+        data_list: list[SourceDocumentData] = []
         for doc in first_sequence_docs:
-            data = EmbeddingData.__from_langchain_document__(doc, get_source_content_function)
+            data = SourceDocumentData.__from_langchain_document__(doc, get_source_content_function)
             data_list.append(data)
         return data_list
     
     @classmethod
-    def __from_langchain_document__(cls, document: Document, get_source_content_function: Callable[[str], str]) -> "EmbeddingData":
+    def __from_langchain_document__(cls, document: Document, get_source_content_function: Callable[[str], str]) -> "SourceDocumentData":
         """Convert from Langchain Document."""
-        if EmbeddingData.embedding_config is None:
-            EmbeddingData.embedding_config = EmbeddingConfig()
-        source_id = document.metadata.get(EmbeddingData.embedding_config.source_id_key, "")
-        category = document.metadata.get(EmbeddingData.embedding_config.category_key, "")
+        embedding_config = cls._get_embedding_config_()
+        source_id = document.metadata.get(embedding_config.source_id_key, "")
+        category = document.metadata.get(embedding_config.category_key, "")
 
-        updated_at_str = document.metadata.get(EmbeddingData.embedding_config.updated_at_key, None)
+        updated_at_str = document.metadata.get(embedding_config.updated_at_key, None)
         if updated_at_str:
             updated_at = datetime.fromisoformat(updated_at_str)
         else:
             updated_at = datetime.now(timezone.utc)
 
-        data = EmbeddingData(
+        extended_properties_str = document.metadata.get(embedding_config.extended_properties_key, "{}")
+        extended_properties = json.loads(extended_properties_str)
+
+        # documentのmetadataをコピーして、source_id, category, updated_at, extended_propertiesを削除したものをtagsとする
+        metadata_copy = document.metadata.copy()
+        tags = {
+            k: v for k, v in metadata_copy.items() if k not in [
+                embedding_config.source_id_key, 
+                embedding_config.category_key, 
+                embedding_config.updated_at_key, 
+                embedding_config.extended_properties_key, 
+                embedding_config.sequence_id_key
+                ]
+            }
+
+        data = SourceDocumentData(
             source_id=source_id,
             source_content=get_source_content_function(source_id),
             category=category,
             updated_at=updated_at,
-            metadata=document.metadata
+            extended_properties=extended_properties,
+            tags=tags
         )
         return data
+
 from abc import ABC, abstractmethod
 from typing import Union, Literal, Annotated, Any
 from pydantic import BaseModel, Field

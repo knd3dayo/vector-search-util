@@ -110,7 +110,11 @@ async def main():
         print("\n=== Search Results ===")
         for i, doc in enumerate(results, start=1):
             print(f"[{i}] {doc.source_content}")
-            print(f"Metadata: {doc.metadata}")
+            print(f"Source ID: {doc.source_id}")
+            print(f"Category: {doc.category}")
+            print(f"Updated At: {doc.updated_at}")
+            print(f"Extended Properties: {json.dumps(doc.extended_properties, ensure_ascii=False)}")
+            print(f"Tags: {doc.tags}")
             print("-" * 40)
     
     elif args.command == "load_data":

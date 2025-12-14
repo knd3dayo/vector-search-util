@@ -72,7 +72,7 @@ class SQLiteClient:
             ''')
             conn.commit()
 
-    async def get_content_by_source_id(self, source_id: str) -> str :
+    def get_content_by_source_id(self, source_id: str) -> str :
         query = "SELECT source_content FROM documents WHERE source_id = ?"
         with sqlite3.connect(self.db_path) as conn:
             cur = conn.cursor()
