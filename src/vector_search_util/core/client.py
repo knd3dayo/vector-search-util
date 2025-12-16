@@ -185,7 +185,7 @@ class EmbeddingBatchClient:
     async def delete_documents_from_excel(
         self, file_path: str, source_id_column: str, category_column: str, tags: dict[str, list[str]] ={}
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
 
         source_id_list: list[str] = []
@@ -205,9 +205,8 @@ class EmbeddingBatchClient:
     async def load_documents_from_excel(
         self, file_path: str, content_column: str, source_id_column: str, category_column: str, metadata_columns: list[str], append_vectors: bool = False
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
-        df.fillna("", inplace=True)
         data_list = self.__create_documents_from_dataframe__(df, content_column, source_id_column, category_column, metadata_columns)
         await self.update(data_list, append_vectors)
     
@@ -267,7 +266,7 @@ class CategoryBatchClient:
             progress.close()
 
     def create_category_data_from_dataframe(
-        self, df: DataFrame, name_column: str, description_column: str
+        self, df: DataFrame, name_column: str, description_column: str, metadata_columns: list[str]
     ) -> list[CategoryData]:
         category_list: list[CategoryData] = []
         for _, row in df.iterrows():
@@ -275,23 +274,24 @@ class CategoryBatchClient:
             description = row.get(description_column, "")
             if not name:
                 continue
-            category = CategoryData(name=str(name), description=str(description))
+            metadata = {col: row.get(col, "") for col in metadata_columns}
+            category = CategoryData(name=str(name), description=str(description), metadata=metadata )
             category_list.append(category)
         return category_list
 
     async def load_category_data_from_excel(
-        self, file_path: str, name_column: str, description_column: str
+        self, file_path: str, name_column: str, description_column: str, metadata_columns: list[str]
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
-        df.fillna("", inplace=True)
         category_list: list[CategoryData] = []
         for _, row in df.iterrows():
             name = row.get(name_column, "")
             description = row.get(description_column, "")
             if not name:
                 continue
-            category = CategoryData(name=str(name), description=str(description))
+            metadata = {col: row.get(col, "") for col in metadata_columns}
+            category = CategoryData(name=str(name), description=str(description), metadata=metadata)
             category_list.append(category)
     
         await self.embedding_client.upsert_categories(category_list)
@@ -304,6 +304,7 @@ class CategoryBatchClient:
         data = {
             "name": [category.name for category in category_list],
             "description": [category.description for category in category_list],
+            "metadata": [category.metadata for category in category_list],
         }
         df = pd.DataFrame(data)
         df.to_excel(file_path, index=False)
@@ -311,7 +312,7 @@ class CategoryBatchClient:
     async def delete_category_data_from_excel(
         self, file_path: str, name_column: str
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
         name_list: list[str] = []
         if name_column in df.columns:
@@ -339,7 +340,7 @@ class RelationBatchClient:
             progress.close()
 
     def create_relation_data_from_dataframe(
-        self, df: DataFrame, from_node_column: str, to_node_column: str, edge_type_column: str
+        self, df: DataFrame, from_node_column: str, to_node_column: str, edge_type_column: str, metadata_columns: list[str]
     ) -> list[RelationData]:
         relation_list: list[RelationData] = []
         for _, row in df.iterrows():
@@ -348,22 +349,24 @@ class RelationBatchClient:
             edge_type = row.get(edge_type_column, "")
             if not from_node or not to_node or not edge_type:
                 continue
-            relation = RelationData(from_node=str(from_node), to_node=str(to_node), edge_type=str(edge_type))
+
+            metadata = {col: row.get(col, "") for col in metadata_columns}
+            relation = RelationData(from_node=str(from_node), to_node=str(to_node), edge_type=str(edge_type), metadata=metadata)
             relation_list.append(relation)
         return relation_list
 
     async def load_relation_data_from_excel(
-        self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str
+        self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str, metadata_columns: list[str]
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
-        df.fillna("", inplace=True)
         relation_list: list[RelationData] = []
         for _, row in df.iterrows():
             from_node = row.get(from_node_column, "")
             to_node = row.get(to_node_column, "")
             edge_type = row.get(edge_type_column, "")
-            relation = RelationData(from_node=str(from_node), to_node=str(to_node), edge_type=str(edge_type))
+            metadata = {col: row.get(col, "") for col in metadata_columns}
+            relation = RelationData(from_node=str(from_node), to_node=str(to_node), edge_type=str(edge_type), metadata=metadata)
             relation_list.append(relation)
     
         await self.embedding_client.upsert_relations(relation_list)
@@ -377,6 +380,7 @@ class RelationBatchClient:
             "from_node": [relation.from_node for relation in relation_list],
             "to_node": [relation.to_node for relation in relation_list],
             "edge_type": [relation.edge_type for relation in relation_list],
+            "metadata": [relation.metadata for relation in relation_list],
         }
         df = pd.DataFrame(data)
         df.to_excel(file_path, index=False)
@@ -384,7 +388,7 @@ class RelationBatchClient:
     async def delete_relation_data_from_excel(
         self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
         relation_list: list[RelationData] = []
         for _, row in df.iterrows():
@@ -403,7 +407,7 @@ class TagBatchClient:
     async def delete_tag_data_from_excel(
         self, file_path: str, name_column: str
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
         name_list: list[str] = []
         if name_column in df.columns:
@@ -419,23 +423,24 @@ class TagBatchClient:
         data = {
             "name": [tag.name for tag in tag_list],
             "description": [tag.description for tag in tag_list],
+            "metadata": [tag.metadata for tag in tag_list],
         }
         df = pd.DataFrame(data)
         df.to_excel(file_path, index=False)
 
     async def load_tag_data_from_excel(
-        self, file_path: str, name_column: str, description_column: str
+        self, file_path: str, name_column: str, description_column: str, metadata_columns: list[str]
     ):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
-        df.fillna("", inplace=True)
         tag_list: list[TagData] = []
         for _, row in df.iterrows():
             name = row.get(name_column, "")
-            description = row.get(description_column, "")
             if not name:
                 continue
-            tag = TagData(name=str(name), description=str(description))
+            description = row.get(description_column, "")
+            metadata = {col: row.get(col, "") for col in metadata_columns}
+            tag = TagData(name=str(name), description=str(description), metadata=metadata)
             tag_list.append(tag)
     
         await self.embedding_client.upsert_tags(tag_list)

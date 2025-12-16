@@ -38,7 +38,8 @@ class SQLiteClient:
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS categories (
                     name TEXT NOT NULL PRIMARY KEY,
-                    description TEXT NOT NULL
+                    description TEXT NOT NULL,
+                    metadata TEXT
                 )
             ''')
             conn.commit()
@@ -52,6 +53,7 @@ class SQLiteClient:
                     from_node TEXT NOT NULL,
                     to_node TEXT NOT NULL,
                     edge_type TEXT NOT NULL,
+                    metadata TEXT,
                     PRIMARY KEY (from_node, to_node, edge_type),
                     FOREIGN KEY (from_node) REFERENCES categories(name),
                     FOREIGN KEY (to_node) REFERENCES categories(name)
@@ -67,6 +69,7 @@ class SQLiteClient:
                 CREATE TABLE IF NOT EXISTS tags (
                     name TEXT NOT NULL,
                     description TEXT,
+                    metadata TEXT,
                     PRIMARY KEY (name)
                 )
             ''')
@@ -145,7 +148,7 @@ class SQLiteClient:
         conditions = []
         if names:
             conditions.append("name IN ({})".format(",".join("?" * len(names))))
-        query = "SELECT name, description FROM categories"
+        query = "SELECT name, description, metadata FROM categories"
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -153,7 +156,7 @@ class SQLiteClient:
             async with conn.cursor() as cur:
                 await cur.execute(query, tuple(names))
                 rows = await cur.fetchall()
-                categories = [CategoryData(name=row[0], description=row[1]) for row in rows]
+                categories = [CategoryData(name=row[0], description=row[1], metadata=json.loads(row[2]) if row[2] else {}) for row in rows]
                 return categories
 
     async def delete_categories(self, names: list[str]):
@@ -168,10 +171,10 @@ class SQLiteClient:
         async with aiosqlite.connect(self.db_path) as conn:
             async with conn.cursor() as cur:
                 await cur.executemany('''
-                    INSERT INTO categories (name, description)
-                    VALUES (?, ?)
-                    ON CONFLICT(name) DO UPDATE SET description=excluded.description
-                ''', [(category.name, category.description) for category in category_list])
+                    INSERT INTO categories (name, description, metadata)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
+                ''', [(category.name, category.description, json.dumps(category.metadata, ensure_ascii=False) if category.metadata else None) for category in category_list])
             await conn.commit()
     
     async def delete_all_categories(self):
@@ -185,7 +188,7 @@ class SQLiteClient:
     async def upsert_new_categories(self, data_list_category_names_set: set[str]):
         existing_category_names_set = set([category.name for category in await self.get_categories()])
         new_category_names_set = data_list_category_names_set - existing_category_names_set
-        new_categories = [CategoryData(name=category_name, description="") for category_name in new_category_names_set]
+        new_categories = [CategoryData(name=category_name, description="", metadata={}) for category_name in new_category_names_set]
         if new_categories:
             await self.upsert_categories(new_categories)
 
@@ -203,7 +206,7 @@ class SQLiteClient:
         if edge_types:
             conditions.append("edge_type IN ({})".format(",".join("?" * len(edge_types))))
 
-        query = "SELECT from_node, to_node, edge_type FROM relations"
+        query = "SELECT from_node, to_node, edge_type, metadata FROM relations"
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -211,17 +214,17 @@ class SQLiteClient:
             async with conn.cursor() as cur:
                 await cur.execute(query, tuple(param for param in from_nodes + to_nodes + edge_types if param))
                 rows = await cur.fetchall()
-                relations = [RelationData(from_node=row[0], to_node=row[1], edge_type=row[2]) for row in rows]
+                relations = [RelationData(from_node=row[0], to_node=row[1], edge_type=row[2], metadata=json.loads(row[3]) if row[3] else {}) for row in rows]
                 return relations
 
     async def upsert_relations(self, relations: list[RelationData]):
         async with aiosqlite.connect(self.db_path) as conn:
             async with conn.cursor() as cur:
                 await cur.executemany('''
-                    INSERT INTO relations (from_node, to_node, edge_type)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(from_node, to_node, edge_type) DO NOTHING
-                ''', [(relation.from_node, relation.to_node, relation.edge_type) for relation in relations if relation.is_valid()])
+                    INSERT INTO relations (from_node, to_node, edge_type, metadata)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(from_node, to_node, edge_type) DO UPDATE SET metadata=excluded.metadata
+                ''', [(relation.from_node, relation.to_node, relation.edge_type, json.dumps(relation.metadata, ensure_ascii=False) if relation.metadata else None) for relation in relations if relation.is_valid()])
             await conn.commit()
 
     async def delete_relations(self, relations: list[RelationData]):
@@ -244,7 +247,7 @@ class SQLiteClient:
         conditions = []
         if names:
             conditions.append("name IN ({})".format(",".join("?" * len(names))))
-        query = "SELECT name, description FROM tags"
+        query = "SELECT name, description, metadata FROM tags"
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -252,17 +255,17 @@ class SQLiteClient:
             async with conn.cursor() as cur:
                 await cur.execute(query, tuple(names))
                 rows = await cur.fetchall()
-                tags = [TagData(name=row[0], description=row[1]) for row in rows]
+                tags = [TagData(name=row[0], description=row[1], metadata=json.loads(row[2]) if row[2] else {}) for row in rows]
                 return tags
         
     async def upsert_tags(self, tag_list: list[TagData]):
         async with aiosqlite.connect(self.db_path) as conn:
             async with conn.cursor() as cur:
                 await cur.executemany('''
-                    INSERT INTO tags (name, description)
-                    VALUES (?, ?)
-                    ON CONFLICT(name) DO UPDATE SET description=excluded.description
-                ''', [(tag.name, tag.description) for tag in tag_list])
+                    INSERT INTO tags (name, description, metadata)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
+                ''', [(tag.name, tag.description, json.dumps(tag.metadata, ensure_ascii=False) if tag.metadata else None) for tag in tag_list])
             await conn.commit()
 
     async def delete_tags(self, names: list[str]):
@@ -284,7 +287,7 @@ class SQLiteClient:
     async def upsert_new_tags(self, data_list_metadata_keys_set: set[str]):
         existing = {t.name for t in await self.get_tags(list(data_list_metadata_keys_set))}
         new_names = data_list_metadata_keys_set - existing
-        new_tags = [TagData(name=n, description="") for n in new_names]
+        new_tags = [TagData(name=n, description="", metadata={}) for n in new_names]
         if new_tags:
             await self.upsert_tags(new_tags)
 

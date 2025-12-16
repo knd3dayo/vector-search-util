@@ -318,30 +318,42 @@ async def delete_documents_from_excel(
     )
 
 @app.post("/load_categories_from_excel")
-async def load_categories(
-        input_file_path: str, name_column: str, description_column: str
+async def load_categories_from_excel(
+        input_file_path: str, name_column: str, description_column: str, metadata_columns: list[str] = []
     ):
     embedding_client = EmbeddingClient()
     batch_client = CategoryBatchClient(embedding_client)
     
     await batch_client.load_category_data_from_excel(
-        input_file_path, name_column, description_column
+        input_file_path, name_column, description_column, metadata_columns
     )
 
 @app.get("/unload_categories_to_excel")
-async def unload_categories(output_file: str):
+async def unload_categories_to_excel(output_file: str):
 
     embedding_client = EmbeddingClient()
     batch_client = CategoryBatchClient(embedding_client)
     await batch_client.unload_category_data_to_excel(output_file)
 
+@app.delete("/delete_category_data_from_excel")
+async def delete_category_data_from_excel(input_file_path: str, name_column: str):
+    embedding_client = EmbeddingClient()
+    batch_client = CategoryBatchClient(embedding_client)
+    await batch_client.delete_category_data_from_excel(input_file_path, name_column)
+
 @app.post("/load_relations_from_excel")
-async def load_relations_from_excel(input_file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str):
+async def load_relations_from_excel(
+    input_file_path: str, 
+    from_node_column: str, 
+    to_node_column: str, 
+    edge_type_column: str, 
+    metadata_columns: list[str] = []
+    ):
     embedding_client = EmbeddingClient()
     batch_client = RelationBatchClient(embedding_client)
     
     await batch_client.load_relation_data_from_excel(
-        input_file_path, from_node_column, to_node_column, edge_type_column
+        input_file_path, from_node_column, to_node_column, edge_type_column, metadata_columns
     )
 @app.get("/unload_relations_to_excel")
 async def unload_relations_to_excel(output_file: str):
@@ -357,17 +369,17 @@ async def delete_relations_from_excel(input_file_path: str, from_node_column: st
     await batch_client.delete_relation_data_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column)
 
 @app.post("/load_tags_from_excel")
-async def load_tags_from_excel(input_file_path, name_column, description_column):
+async def load_tags_from_excel(input_file_path, name_column, description_column, metadata_columns: list[str] = []):
     config = EmbeddingConfig()
     embedding_client = EmbeddingClient(config)
     batch_client = TagBatchClient(embedding_client)
     
     await batch_client.load_tag_data_from_excel(
-        input_file_path, name_column, description_column
+        input_file_path, name_column, description_column, metadata_columns
     )
 
 @app.get("/unload_tags_to_excel")
-async def unload_tags_from_excel(output_file: str):
+async def unload_tags_to_excel(output_file: str):
 
     config = EmbeddingConfig()
     embedding_client = EmbeddingClient(config)
@@ -381,8 +393,6 @@ async def delete_tags_from_excel(input_file_path: str, name_column: str):
     embedding_client = EmbeddingClient(config)
     batch_client = TagBatchClient(embedding_client)
     await batch_client.delete_tag_data_from_excel(input_file_path, name_column)
-
-
 
 
 # ping endpoint

@@ -57,6 +57,7 @@ class EmbeddingConfig:
 class CategoryData(BaseModel):
     name: str
     description: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 # relation_data
 class RelationData(BaseModel):
@@ -64,6 +65,7 @@ class RelationData(BaseModel):
     from_node: str
     to_node: str
     edge_type: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def is_valid(self) -> bool:
         # すべてのフィールドが非空文字列であることを確認
@@ -73,6 +75,7 @@ class RelationData(BaseModel):
 class TagData(BaseModel):
     name: str
     description: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SourceDocumentData(BaseModel):
