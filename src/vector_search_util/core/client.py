@@ -104,8 +104,12 @@ class EmbeddingClient:
     async def upsert_categories(self, categories: list[CategoryData]):
         await self.sqlite_client.upsert_categories(categories)    
 
-    async def get_categories(self, name_list: list[str] = []) -> list[CategoryData]:
-        return await self.sqlite_client.get_categories(name_list)
+    async def get_categories(
+        self, 
+        name_list: list[str] = [], 
+        conditions: ConditionContainer = ConditionContainer()
+        ) -> list[CategoryData]:
+        return await self.sqlite_client.get_categories(name_list, conditions)
     
     async def delete_categories(self, name_list: list[str]):
         await self.sqlite_client.delete_categories(name_list)
@@ -114,8 +118,12 @@ class EmbeddingClient:
         await self.sqlite_client.delete_all_categories()
 
     # relations
-    async def get_relations(self, from_nodes: list[str] = [], to_nodes: list[str] = [], edge_types: list[str] = []) -> list[RelationData]:
-        return await self.sqlite_client.get_relations(from_nodes, to_nodes, edge_types)
+    async def get_relations(
+        self, from_nodes: list[str] = [], 
+        to_nodes: list[str] = [], edge_types: list[str] = [],
+        conditions: ConditionContainer = ConditionContainer()
+        ) -> list[RelationData]:
+        return await self.sqlite_client.get_relations(from_nodes, to_nodes, edge_types, conditions)
 
     async def upsert_relations(self, relations: list[RelationData]):
         await self.sqlite_client.upsert_relations(relations)
@@ -203,7 +211,8 @@ class EmbeddingBatchClient:
         await self.embedding_client.delete_documents_by_source_ids(source_id_list, condition)
     
     async def load_documents_from_excel(
-        self, file_path: str, content_column: str, source_id_column: str, category_column: str, metadata_columns: list[str], append_vectors: bool = False
+        self, file_path: str, content_column: str, source_id_column: str, category_column: str, 
+        metadata_columns: list[str], append_vectors: bool = False
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
@@ -280,7 +289,8 @@ class CategoryBatchClient:
         return category_list
 
     async def load_category_data_from_excel(
-        self, file_path: str, name_column: str, description_column: str, metadata_columns: list[str]
+        self, file_path: str, name_column: str, description_column: str, 
+        metadata_columns: list[str]
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
@@ -297,16 +307,35 @@ class CategoryBatchClient:
         await self.embedding_client.upsert_categories(category_list)
 
     async def unload_category_data_to_excel(
-        self, file_path: str
+        self, file_path: str,
+        tags: dict[str, Any] ={}
     ):
-        # 全カテゴリを取得してExcelに保存する
-        category_list = await self.embedding_client.get_categories()
-        data = {
-            "name": [category.name for category in category_list],
-            "description": [category.description for category in category_list],
-            "metadata": [category.metadata for category in category_list],
-        }
-        df = pd.DataFrame(data)
+        # tagからConditionContainerを作成
+        condition = ConditionContainer()
+        for key, values in tags.items():
+            condition.add_in_condition(key, values)
+            
+        category_list = await self.embedding_client.get_categories(conditions=condition)
+
+        keys = set()
+        keys.add("name")
+        keys.add("description")
+
+        data_list = []
+        for category in category_list:
+            data = {
+                "name": category.name,
+                "description": category.description,
+            }
+            keys.update(category.metadata.keys())
+            data.update(category.metadata)
+            data_list.append(data)
+
+        df = DataFrame()
+        # 全てのキーをDataFrameのカラムとして追加
+        for key in keys:
+            df[key] = [data.get(key, "") for data in data_list]
+
         df.to_excel(file_path, index=False)
 
     async def delete_category_data_from_excel(
@@ -356,7 +385,8 @@ class RelationBatchClient:
         return relation_list
 
     async def load_relation_data_from_excel(
-        self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str, metadata_columns: list[str]
+        self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str, 
+        metadata_columns: list[str]
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
         df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
@@ -372,17 +402,33 @@ class RelationBatchClient:
         await self.embedding_client.upsert_relations(relation_list)
 
     async def unload_relation_data_to_excel(
-        self, file_path: str
+        self, file_path: str,
+        tags: dict[str, Any] ={}
     ):
-        # 全カテゴリを取得してExcelに保存する
-        relation_list = await self.embedding_client.get_relations()
-        data = {
-            "from_node": [relation.from_node for relation in relation_list],
-            "to_node": [relation.to_node for relation in relation_list],
-            "edge_type": [relation.edge_type for relation in relation_list],
-            "metadata": [relation.metadata for relation in relation_list],
-        }
-        df = pd.DataFrame(data)
+        # tagからConditionContainerを作成
+        conditions = ConditionContainer()
+        for key, values in tags.items():
+            conditions.add_in_condition(key, values)
+        relation_list = await self.embedding_client.get_relations(conditions=conditions)
+        keys = set()
+        keys.add("from_node")
+        keys.add("to_node")
+        keys.add("edge_type")
+        data_list = []
+        for relation in relation_list:
+            data = {
+                "from_node": relation.from_node,
+                "to_node": relation.to_node,
+                "edge_type": relation.edge_type,
+            }
+            keys.update(relation.metadata.keys())
+            data.update(relation.metadata)
+            data_list.append(data)
+
+        df = DataFrame()
+        # 全てのキーをDataFrameのカラムとして追加
+        for key in keys:
+            df[key] = [data.get(key, "") for data in data_list]
         df.to_excel(file_path, index=False)
 
     async def delete_relation_data_from_excel(

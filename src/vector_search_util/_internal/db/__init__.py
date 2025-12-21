@@ -1,7 +1,7 @@
 import os, json
 import aiosqlite
 import sqlite3
-from vector_search_util.model import CategoryData, RelationData, TagData, SourceDocumentData
+from vector_search_util.model import CategoryData, RelationData, TagData, SourceDocumentData, ConditionContainer
 
 # sqlite3
 class SQLiteClient:
@@ -144,17 +144,19 @@ class SQLiteClient:
                 ''')
             await conn.commit()
 
-    async def get_categories(self, names: list[str] = []) -> list[CategoryData]:
-        conditions = []
+    async def get_categories(self, names: list[str] = [], conditions: ConditionContainer = ConditionContainer()) -> list[CategoryData]:
         if names:
-            conditions.append("name IN ({})".format(",".join("?" * len(names))))
+            conditions.add_in_condition("name", names)
+
+
         query = "SELECT name, description, metadata FROM categories"
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+        conditions_sql = conditions.to_sqlite_sql()
+        if conditions_sql:
+            query += " WHERE " + conditions_sql
 
         async with aiosqlite.connect(self.db_path) as conn:
             async with conn.cursor() as cur:
-                await cur.execute(query, tuple(names))
+                await cur.execute(query)
                 rows = await cur.fetchall()
                 categories = [CategoryData(name=row[0], description=row[1], metadata=json.loads(row[2]) if row[2] else {}) for row in rows]
                 return categories
@@ -196,19 +198,21 @@ class SQLiteClient:
     async def get_relations(
             self, 
             from_nodes: list[str] = [], 
-            to_nodes: list[str] = [], edge_types: list[str] = []
+            to_nodes: list[str] = [], edge_types: list[str] = [],
+            conditions: ConditionContainer = ConditionContainer()
             ) -> list[RelationData]:
-        conditions = []
-        if from_nodes:
-            conditions.append("from_node IN ({})".format(",".join("?" * len(from_nodes))))
-        if to_nodes:
-            conditions.append("to_node IN ({})".format(",".join("?" * len(to_nodes))))
-        if edge_types:
-            conditions.append("edge_type IN ({})".format(",".join("?" * len(edge_types))))
 
+        if from_nodes:
+            conditions.add_in_condition("from_node", from_nodes)
+        if to_nodes:
+            conditions.add_in_condition("to_node", to_nodes)
+        if edge_types:
+            conditions.add_in_condition("edge_type", edge_types)
         query = "SELECT from_node, to_node, edge_type, metadata FROM relations"
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+
+        sql_conditions = conditions.to_sqlite_sql()
+        if sql_conditions:
+            query += " WHERE " + sql_conditions
 
         async with aiosqlite.connect(self.db_path) as conn:
             async with conn.cursor() as cur:
