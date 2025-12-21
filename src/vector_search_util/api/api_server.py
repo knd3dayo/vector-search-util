@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from langchain_core.documents import Document
 from vector_search_util.core.client import (
     EmbeddingClient, EmbeddingBatchClient, RelationBatchClient, CategoryBatchClient, TagBatchClient
@@ -9,9 +9,10 @@ from vector_search_util.model import (
 )
 
 app = FastAPI()
+router = APIRouter()
 
 # vector searchでLangChainのDocumentsを返すAPI
-@app.get("/vector_search_langchain_documents", response_model=list)
+@router.get("/vector_search_langchain_documents", response_model=list)
 async def vector_search_langchain_documents(
     query: Annotated[str, "The search query string."],
     category: Annotated[str, "The category to filter the search by."] = "",
@@ -34,7 +35,7 @@ async def vector_search_langchain_documents(
     results = await embedding_client.vector_search_langchain_documents(query, category, filter, num_results)
     return results
 
-@app.get("/get_langchain_documents", response_model=list)
+@router.get("/get_langchain_documents", response_model=list)
 async def get_langchain_documents(
     source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
     category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
@@ -45,7 +46,7 @@ async def get_langchain_documents(
     return documents
 
 
-@app.get("/vector_search", response_model=list)
+@router.get("/vector_search", response_model=list)
 async def vector_search(
     query: Annotated[str, "The search query string."],
     category: Annotated[str, "The category to filter the search by."] = "",
@@ -69,7 +70,7 @@ async def vector_search(
     return results
 
 # get documents
-@app.get("/get_documents", response_model=list)
+@router.get("/get_documents", response_model=list)
 async def get_documents(
     source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
     category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
@@ -90,7 +91,7 @@ async def get_documents(
     return documents
 
 # upsert documents
-@app.post("/upsert_documents")
+@router.post("/upsert_documents")
 async def upsert_documents(
     data_list: Annotated[list[SourceDocumentData], "A list of documents to update embeddings for."]
 ):
@@ -105,7 +106,7 @@ async def upsert_documents(
     await embedding_client.upsert_documents(data_list)
 
 # delete documents
-@app.delete("/delete_documents")
+@router.delete("/delete_documents")
 async def delete_documents(
     source_id_list: Annotated[list[str], "A list of source IDs of documents to delete."],
     filter: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
@@ -122,7 +123,7 @@ async def delete_documents(
     await embedding_client.delete_documents_by_source_ids(source_id_list, filter)
 
 # get categories
-@app.get("/get_categories", response_model=list)
+@router.get("/get_categories", response_model=list)
 async def get_categories(
     name_list: Annotated[list[str], "A list of category names to retrieve."] = [],
     conditions: Annotated[ConditionContainer, "A dictionary of tags to filter categories by. "] = ConditionContainer(),
@@ -140,7 +141,7 @@ async def get_categories(
     return categories
 
 # upsert categories
-@app.post("/upsert_categories")
+@router.post("/upsert_categories")
 async def upsert_categories(
     categories: Annotated[list[CategoryData], "The list of categories to update."],
 ):
@@ -155,7 +156,7 @@ async def upsert_categories(
     await embedding_client.upsert_categories(categories)    
 
 # delete category
-@app.delete("/delete_categories")
+@router.delete("/delete_categories")
 async def delete_categories(
     name_list: Annotated[list[str], "The list of category names to delete."],
 ):
@@ -170,7 +171,7 @@ async def delete_categories(
     await embedding_client.delete_categories(name_list)
 
 # get relations
-@app.get("/get_relations")
+@router.get("/get_relations")
 async def get_relations(
     from_nodes: Annotated[list[str], "A list of source node IDs to filter relations by."] = [],
     to_nodes: Annotated[list[str], "A list of target node IDs to filter relations by."] = [],
@@ -188,7 +189,7 @@ async def get_relations(
     return relations
 
 # upsert relations
-@app.post("/upsert_relations")
+@router.post("/upsert_relations")
 async def upsert_relations(
     relations: Annotated[list[RelationData], "The list of relations to upsert."],
 ):
@@ -203,7 +204,7 @@ async def upsert_relations(
     await embedding_client.upsert_relations(relations)
 
 # delete relations
-@app.delete("/delete_relations")
+@router.delete("/delete_relations")
 async def delete_relations(
     relations: Annotated[list[RelationData], "The list of relations to delete."],
 ):
@@ -218,7 +219,7 @@ async def delete_relations(
     await embedding_client.delete_relations(relations)
 
 # get tags
-@app.get("/get_tags")
+@router.get("/get_tags")
 async def get_tags() -> list[TagData]:
     """Retrieve tags from the vector database.
 
@@ -231,7 +232,7 @@ async def get_tags() -> list[TagData]:
     return tags
 
 # upsert tags
-@app.post("/upsert_tags")
+@router.post("/upsert_tags")
 async def upsert_tags(
     tags: Annotated[list[TagData], "The list of tags to upsert."],
 ):
@@ -246,7 +247,7 @@ async def upsert_tags(
     await embedding_client.upsert_tags(tags)
 
 # delete tags
-@app.delete("/delete_tags")
+@router.delete("/delete_tags")
 async def delete_tags(
     name_list: Annotated[list[str], "The list of tag names to delete."],
 ):
@@ -260,7 +261,7 @@ async def delete_tags(
     embedding_client = EmbeddingClient(config)
     await embedding_client.delete_tags(name_list)
 
-@app.post("/load_documents_from_excel")
+@router.post("/load_documents_from_excel")
 async def load_documents_from_excel(
         file_path: Annotated[str, "The path to the Excel file."],
         content_column: Annotated[str, "The name of the column containing document content."] = "content",
@@ -289,7 +290,7 @@ async def load_documents_from_excel(
         file_path, content_column, source_id_column, category_column, metadata_columns, append_vectors
     )
 
-@app.get("/unload_documents_to_excel")
+@router.get("/unload_documents_to_excel")
 async def unload_documents_to_excel(
         file_path: Annotated[str, "The path to the output Excel file."]
     ):
@@ -303,7 +304,7 @@ async def unload_documents_to_excel(
     batch_client = EmbeddingBatchClient(embedding_client)
     await batch_client.unload_documents_to_excel(file_path)
 
-@app.delete("/delete_documents_from_excel")
+@router.delete("/delete_documents_from_excel")
 async def delete_documents_from_excel(
         file_path: Annotated[str, "The path to the Excel file."],
         source_id_column: Annotated[str, "The name of the column containing source IDs."] = "source_id",
@@ -325,7 +326,7 @@ async def delete_documents_from_excel(
         file_path, source_id_column, category_column, metadata_columns
     )
 
-@app.post("/load_categories_from_excel")
+@router.post("/load_categories_from_excel")
 async def load_categories_from_excel(
         input_file_path: str, name_column: str, description_column: str, metadata_columns: list[str] = []
     ):
@@ -336,20 +337,20 @@ async def load_categories_from_excel(
         input_file_path, name_column, description_column, metadata_columns
     )
 
-@app.get("/unload_categories_to_excel")
+@router.get("/unload_categories_to_excel")
 async def unload_categories_to_excel(output_file: str):
 
     embedding_client = EmbeddingClient()
     batch_client = CategoryBatchClient(embedding_client)
     await batch_client.unload_category_data_to_excel(output_file)
 
-@app.delete("/delete_category_data_from_excel")
+@router.delete("/delete_category_data_from_excel")
 async def delete_category_data_from_excel(input_file_path: str, name_column: str):
     embedding_client = EmbeddingClient()
     batch_client = CategoryBatchClient(embedding_client)
     await batch_client.delete_category_data_from_excel(input_file_path, name_column)
 
-@app.post("/load_relations_from_excel")
+@router.post("/load_relations_from_excel")
 async def load_relations_from_excel(
     input_file_path: str, 
     from_node_column: str, 
@@ -363,20 +364,20 @@ async def load_relations_from_excel(
     await batch_client.load_relation_data_from_excel(
         input_file_path, from_node_column, to_node_column, edge_type_column, metadata_columns
     )
-@app.get("/unload_relations_to_excel")
+@router.get("/unload_relations_to_excel")
 async def unload_relations_to_excel(output_file: str):
 
     embedding_client = EmbeddingClient()
     batch_client = RelationBatchClient(embedding_client)
     await batch_client.unload_relation_data_to_excel(output_file)
 
-@app.delete("/delete_relations_from_excel")
+@router.delete("/delete_relations_from_excel")
 async def delete_relations_from_excel(input_file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str):
     embedding_client = EmbeddingClient()
     batch_client = RelationBatchClient(embedding_client)
     await batch_client.delete_relation_data_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column)
 
-@app.post("/load_tags_from_excel")
+@router.post("/load_tags_from_excel")
 async def load_tags_from_excel(input_file_path, name_column, description_column, metadata_columns: list[str] = []):
     config = EmbeddingConfig()
     embedding_client = EmbeddingClient(config)
@@ -386,7 +387,7 @@ async def load_tags_from_excel(input_file_path, name_column, description_column,
         input_file_path, name_column, description_column, metadata_columns
     )
 
-@app.get("/unload_tags_to_excel")
+@router.get("/unload_tags_to_excel")
 async def unload_tags_to_excel(output_file: str):
 
     config = EmbeddingConfig()
@@ -394,7 +395,7 @@ async def unload_tags_to_excel(output_file: str):
     batch_client = TagBatchClient(embedding_client)
     await batch_client.unload_tag_data_to_excel(output_file)
 
-@app.delete("/delete_tags_from_excel")
+@router.delete("/delete_tags_from_excel")
 async def delete_tags_from_excel(input_file_path: str, name_column: str):
 
     config = EmbeddingConfig()
@@ -402,7 +403,7 @@ async def delete_tags_from_excel(input_file_path: str, name_column: str):
     batch_client = TagBatchClient(embedding_client)
     await batch_client.delete_tag_data_from_excel(input_file_path, name_column)
 
-@app.get("/get_conditions")
+@router.get("/get_conditions")
 async def get_conditions(name_list: list[str] = []) -> list[ConditionContainer]:
     """Retrieve conditions from the vector database.
 
@@ -414,7 +415,7 @@ async def get_conditions(name_list: list[str] = []) -> list[ConditionContainer]:
     conditions = await embedding_client.get_conditions(name_list)
     return conditions
 
-@app.post("/upsert_conditions")
+@router.post("/upsert_conditions")
 async def upsert_conditions(
     conditions: Annotated[list[ConditionContainer], "The list of conditions to upsert."],
 ):
@@ -428,7 +429,7 @@ async def upsert_conditions(
     embedding_client = EmbeddingClient(config)
     await embedding_client.upsert_conditions(conditions)
 
-@app.delete("/delete_conditions")
+@router.delete("/delete_conditions")
 async def delete_conditions(
     name_list: Annotated[list[str], "The list of condition names to delete."],
 ):
@@ -442,15 +443,8 @@ async def delete_conditions(
     embedding_client = EmbeddingClient(config)
     await embedding_client.delete_conditions(name_list) 
 
-# ping endpoint
-@app.get("/ping")
-async def ping():
-    """Ping the API server to check if it's alive.
 
-    Returns:
-        str: A message indicating that the server is alive.
-    """
-    return "Pong! The API server is alive."
+app.include_router(router, prefix="/api/vector_search_util")
 
 if __name__ == "__main__":
     import uvicorn
