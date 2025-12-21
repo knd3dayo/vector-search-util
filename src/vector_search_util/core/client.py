@@ -156,6 +156,19 @@ class EmbeddingClient:
     async def delete_all_tags(self):
         await self.sqlite_client.delete_all_tags()
 
+    async def get_conditions(self, name_list: list[str] = []) -> list[ConditionContainer]:
+        return await self.sqlite_client.get_conditions(name_list)
+    
+    async def upsert_conditions(self, conditions: list[ConditionContainer]):
+        await self.sqlite_client.upsert_conditions(conditions)
+
+    async def delete_conditions(self, name_list: list[str]):
+        await self.sqlite_client.delete_conditions(name_list)
+    
+    async def delete_all_conditions(self):
+        await self.sqlite_client.delete_all_conditions()
+    
+
 class EmbeddingBatchClient:
     def __init__(self, embedding_client: EmbeddingClient):
         self.embedding_client = embedding_client

@@ -4,7 +4,9 @@ from langchain_core.documents import Document
 from vector_search_util.core.client import (
     EmbeddingClient, EmbeddingBatchClient, RelationBatchClient, CategoryBatchClient, TagBatchClient
 )   
-from vector_search_util.model import EmbeddingConfig, ConditionContainer, SourceDocumentData, CategoryData, RelationData, TagData
+from vector_search_util.model import (
+    EmbeddingConfig, ConditionContainer, SourceDocumentData, CategoryData, RelationData, TagData
+)
 
 app = FastAPI()
 
@@ -400,6 +402,45 @@ async def delete_tags_from_excel(input_file_path: str, name_column: str):
     batch_client = TagBatchClient(embedding_client)
     await batch_client.delete_tag_data_from_excel(input_file_path, name_column)
 
+@app.get("/get_conditions")
+async def get_conditions(name_list: list[str] = []) -> list[ConditionContainer]:
+    """Retrieve conditions from the vector database.
+
+    Returns:
+        list[ConditionContainer]: A list of conditions retrieved from the vector database.
+    """
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    conditions = await embedding_client.get_conditions(name_list)
+    return conditions
+
+@app.post("/upsert_conditions")
+async def upsert_conditions(
+    conditions: Annotated[list[ConditionContainer], "The list of conditions to upsert."],
+):
+    """Upsert conditions in the vector database.
+
+    Args:
+        conditions (list[ConditionContainer]): The list of conditions to upsert.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.upsert_conditions(conditions)
+
+@app.delete("/delete_conditions")
+async def delete_conditions(
+    name_list: Annotated[list[str], "The list of condition names to delete."],
+):
+    """Delete conditions from the vector database based on a list of condition names.
+
+    Args:
+        name_list (list[str]): The list of condition names to delete.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.delete_conditions(name_list) 
 
 # ping endpoint
 @app.get("/ping")
