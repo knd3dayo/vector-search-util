@@ -2,162 +2,231 @@
 
 ## 概要
 
-**vector_search_util** は、LangChain ベースのベクトルデータベースを簡単に操作するためのユーティリティライブラリです。  
-テキストデータをベクトル化してデータベースに登録し、自然言語による類似検索を行うことができます。
+**vector_search_util** は、LangChain ベースのベクトル検索（登録・検索・削除）を扱うためのユーティリティライブラリです。
 
-このライブラリは、`loader.py` によるデータ登録機能、`search.py` による検索機能、  
-および `__main__.py` によるコマンドラインインターフェースを中心に構成されています。  
-また、`mcp_server.py` により MCP サーバーとしても動作可能です。
-
----
-
-## 特徴
-
-- LangChain の `Document` オブジェクトの `metadata` に **`source_id`** と **`category`** タグを設定可能。  
-- `source_id` をキーとして既存ベクトルの更新が可能。  
-- `category` 単位でベクトルデータの取得・削除が可能。  
-- 柔軟なメタデータ管理により、データの分類・再利用が容易。  
-- Excelファイルを介したデータ入出力に対応し、非エンジニアでも運用可能。
+- Excel（`.xlsx`）からドキュメント/カテゴリ/リレーション/タグを一括投入・エクスポート
+- CLI / REST API（FastAPI）/ MCP サーバー（FastMCP）として利用可能
+- Vector DB は **Chroma**（ローカル永続）または **pgvector**（PostgreSQL）に対応
 
 ---
 
-## 主な機能
+## 前提条件
 
-### 📥 データ登録 (`loader.py`)
-- Excelファイルからテキストデータを読み込み、ベクトルDBに登録。
-- 各行を `EmbeddingData` として処理し、非同期で登録。
-- メタデータを含む柔軟なデータ構造に対応。
+- Python **3.11+**（`pyproject.toml` の `requires-python` に準拠）
+- [uv](https://github.com/astral-sh/uv)
 
-### 🔍 ベクトル検索 (`search.py`)
-- コマンドラインから自然言語クエリでベクトル検索を実行。
-- 検索結果をスコア付きで出力。
-- JSONファイルでフィルタ条件を指定可能。
+---
 
-### ⚙️ コマンドライン実行 (`__main__.py`)
-`uv run -m vector_search_util` コマンドで CLI を実行できます。
+## セットアップ
 
-利用可能なサブコマンド:
-- `search`: ベクトル検索
-- `load_data`: ExcelからデータをロードしてベクトルDBに登録
-- `unload_data`: ベクトルDBからデータをExcelにエクスポート
-- `delete_data`: Excelで指定したデータを削除
-- `load_category`: カテゴリ情報をExcelからDBに登録
-- `unload_category`: カテゴリ情報をDBからExcelに出力
-- `delete_category`: カテゴリ情報を削除
-- `load_relation`: 関連情報をExcelからDBに登録
-- `unload_relation`: 関連情報をDBからExcelに出力
-- `delete_relation`: 関連情報を削除
+```bash
+cd vector-search-util
+cp .env_template .env
+uv sync
+```
 
-### 各コマンドのオプション
+> `.env` は実行時設定です（OpenAI/Azure OpenAI、DB、保存先など）。
+
+---
+
+## CLI（コマンドライン）
+
+CLI は `vector_search_util/__main__.py` に実装されています。
+
+```bash
+uv run -m vector_search_util --help
+uv run -m vector_search_util <subcommand> --help
+```
+
+### サブコマンド一覧
+
+- `search` : ベクトル検索（カテゴリ絞り込みのみ対応）
+- `load_data` / `unload_data` / `delete_data` : ドキュメント（Excel）
+- `list_category` / `load_category` / `unload_category` / `delete_category` : カテゴリ
+- `list_relation` / `load_relation` / `unload_relation` / `delete_relation` : リレーション
+- `list_tag` / `load_tag` / `unload_tag` / `delete_tag` : タグ
+
+### オプション
 
 #### 🔍 search
 | オプション | 説明 |
-|-------------|------|
+|---|---|
 | `-q, --query` | 検索クエリ（必須） |
-| `-k, --top_k` | 取得する上位件数（デフォルト: 5） |
-| `-f, --filter_file` | フィルタ条件を含むJSONファイルのパス |
-
-#### 📥 load_data
-| オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | Excelファイルのパス |
-| `--content_column` | コンテンツ列名（デフォルト: content） |
-| `--source_id_column` | ソースID列名（デフォルト: source_id） |
-| `--category_column` | カテゴリ列名（デフォルト: category） |
-| `-m, --metadata_columns` | メタデータ列名のリスト |
-
-#### 📤 unload_data
-| オプション | 説明 |
-|-------------|------|
-| `-o, --output_file` | 出力先Excelファイルのパス |
-| `-f, --filter_file` | フィルタ条件を含むJSONファイルのパス |
-
-#### 🗑 delete_data
-| オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | 削除対象のExcelファイルパス |
-| `--source_id_column` | ソースID列名（デフォルト: source_id） |
-| `-f, --filter_file` | フィルタ条件を含むJSONファイルのパス |
-
-#### 🏷 load_category
-| オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | Excelファイルのパス |
-| `-n, --name_column` | 名前列名（デフォルト: name） |
-| `-d, --description_column` | 説明列名（デフォルト: description） |
-
-#### 📦 unload_category
-| オプション | 説明 |
-|-------------|------|
-| `-o, --output_file` | 出力先Excelファイルのパス |
-| `-f, --filter_file` | フィルタ条件を含むJSONファイルのパス |
-
-#### ❌ delete_category
-| オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | 削除対象のExcelファイルパス |
-| `-n, --name_column` | 名前列名（デフォルト: name） |
+| `-c, --category` | カテゴリ（任意、未指定なら全件） |
+| `-k, --top_k` | 取得件数（デフォルト: 5） |
 
 例:
 ```bash
-uv run -m vector_search_util load_data -i data.xlsx
-uv run -m vector_search_util search --query "AIとは何か？"
+uv run -m vector_search_util search -q "AIとは何か？" -k 5
+uv run -m vector_search_util search -q "AIとは何か？" -c "tech" -k 5
+```
+
+#### 📥 load_data
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 入力 Excel ファイル（必須） |
+| `--content_column` | 本文列名（デフォルト: `content`） |
+| `--source_id_column` | ソースID列名（デフォルト: `source_id`） |
+| `--category_column` | カテゴリ列名（デフォルト: `category`） |
+| `-m, --metadata_columns` | メタデータ列名（複数指定可） |
+| `--append_vectors` | 既存 source_id を削除せず追記（append）する |
+
+例:
+```bash
+uv run -m vector_search_util load_data -i data.xlsx -m author url
+```
+
+#### 📤 unload_data
+| オプション | 説明 |
+|---|---|
+| `-o, --output_file` | 出力 Excel ファイル（必須） |
+
+例:
+```bash
 uv run -m vector_search_util unload_data -o output.xlsx
+```
+
+#### 🗑 delete_data
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 削除対象 Excel（必須） |
+| `--source_id_column` | ソースID列名（デフォルト: `source_id`） |
+
+例:
+```bash
 uv run -m vector_search_util delete_data -i delete_list.xlsx
+```
+
+#### 🏷 カテゴリ
+
+`list_category` は引数なしです。
+
+`load_category`:
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 入力 Excel（必須） |
+| `--name_column` | 名前列名（デフォルト: `name`） |
+| `--description_column` | 説明列名（デフォルト: `description`） |
+| `-m, --metadata_columns` | メタデータ列名（複数指定可） |
+
+`unload_category`:
+| オプション | 説明 |
+|---|---|
+| `-o, --output_file` | 出力 Excel（必須） |
+
+`delete_category`:
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 削除対象 Excel（必須） |
+| `--name_column` | 名前列名（デフォルト: `name`） |
+
+例:
+```bash
+uv run -m vector_search_util list_category
 uv run -m vector_search_util load_category -i category.xlsx
 uv run -m vector_search_util unload_category -o category_out.xlsx
 uv run -m vector_search_util delete_category -i category_delete.xlsx
+```
+
+#### 🔗 リレーション
+
+`list_relation` は引数なしです。
+
+`load_relation`:
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 入力 Excel（必須） |
+| `--from_node_column` | from 列名（デフォルト: `from_node`） |
+| `--to_node_column` | to 列名（デフォルト: `to_node`） |
+| `--edge_type_column` | type 列名（デフォルト: `edge_type`） |
+| `-m, --metadata_columns` | メタデータ列名（複数指定可） |
+
+`unload_relation`:
+| オプション | 説明 |
+|---|---|
+| `-o, --output_file` | 出力 Excel（必須） |
+
+`delete_relation`:
+| オプション | 説明 |
+|---|---|
+| `-i, --input_file_path` | 削除対象 Excel（必須） |
+| `--from_node_column` | from 列名（デフォルト: `from_node`） |
+| `--to_node_column` | to 列名（デフォルト: `to_node`） |
+| `--edge_type_column` | type 列名（デフォルト: `edge_type`） |
+
+例:
+```bash
+uv run -m vector_search_util list_relation
 uv run -m vector_search_util load_relation -i relation.xlsx
 uv run -m vector_search_util unload_relation -o relation_out.xlsx
 uv run -m vector_search_util delete_relation -i relation_delete.xlsx
 ```
 
-### 🔗 relation関連コマンド
+#### 🏷 タグ
 
-`relation` は **カテゴリ間の関連性（関係性）を管理** するための機能です。  
-たとえば、「製品カテゴリ」と「技術カテゴリ」のように、異なるカテゴリ間の関係を定義・検索・削除できます。  
-これにより、知識グラフ的な構造をベクトルDB上で表現することが可能になります。
+`list_tag` は引数なしです。
 
-#### 📥 load_relation
+`load_tag`:
 | オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | Excelファイルのパス |
-| `--source_column` | 関連元カテゴリ列名（デフォルト: source） |
-| `--target_column` | 関連先カテゴリ列名（デフォルト: target） |
-| `--type_column` | 関連タイプ列名（デフォルト: type） |
+|---|---|
+| `-i, --input_file_path` | 入力 Excel（必須） |
+| `--name_column` | 名前列名（デフォルト: `name`） |
+| `--description_column` | 説明列名（デフォルト: `description`） |
+| `-m, --metadata_columns` | メタデータ列名（複数指定可） |
 
-#### 📦 unload_relation
+`unload_tag`:
 | オプション | 説明 |
-|-------------|------|
-| `-o, --output_file` | 出力先Excelファイルのパス |
-| `-f, --filter_file` | フィルタ条件を含むJSONファイルのパス |
+|---|---|
+| `-o, --output_file` | 出力 Excel（必須） |
 
-#### ❌ delete_relation
+`delete_tag`:
 | オプション | 説明 |
-|-------------|------|
-| `-i, --input_file_path` | 削除対象のExcelファイルパス |
-| `--source_column` | 関連元カテゴリ列名（デフォルト: source） |
-| `--target_column` | 関連先カテゴリ列名（デフォルト: target） |
-| `--type_column` | 関連タイプ列名（デフォルト: type） |
+|---|---|
+| `-i, --input_file_path` | 削除対象 Excel（必須） |
+| `--name_column` | 名前列名（デフォルト: `name`） |
 
-#### 💡 利用例
-
-カテゴリ間の関係をExcelで定義し、知識構造を管理できます。
-
-| source | target | type |
-|---------|---------|------|
-| AI | 機械学習 | includes |
-| 機械学習 | 深層学習 | includes |
-| AI | 自然言語処理 | related_to |
-
-このような関係を登録することで、検索時に関連カテゴリをたどる高度な検索が可能になります。
+例:
+```bash
+uv run -m vector_search_util list_tag
+uv run -m vector_search_util load_tag -i tag.xlsx
+uv run -m vector_search_util unload_tag -o tag_out.xlsx
+uv run -m vector_search_util delete_tag -i tag_delete.xlsx
+```
 
 ---
 
-## APIサーバー
+## Python から利用（ライブラリとして）
 
-`vector_search_util` は REST API サーバーとしても動作します。  
-外部アプリケーションやサービスから HTTP 経由でベクトル検索・データ登録を行うことができます。
+高度なフィルタ（メタデータ条件）を使いたい場合は、Python から `ConditionContainer` を利用できます。
+
+```python
+import asyncio
+from vector_search_util.core.client import EmbeddingClient
+from vector_search_util.model import ConditionContainer
+
+async def main():
+    client = EmbeddingClient()
+
+    # metadata の author が "alice" のものだけ検索
+    cond = ConditionContainer().add_eq_condition("author", "alice")
+
+    results = await client.vector_search(
+        query="AIとは何か？",
+        category="",
+        condition=cond,
+        top_k=5,
+    )
+    for r in results:
+        print(r.source_id, r.category)
+
+asyncio.run(main())
+```
+
+---
+
+## REST API サーバー（FastAPI）
+
+`api/api_server.py` は FastAPI アプリです。
 
 ### 起動方法
 
@@ -165,39 +234,72 @@ uv run -m vector_search_util delete_relation -i relation_delete.xlsx
 uv run -m vector_search_util.api.api_server
 ```
 
-### 主なエンドポイント
+- デフォルト: `http://localhost:8000`
+- ヘルスチェック: `GET /ping`
 
-| メソッド | エンドポイント | 説明 |
-|-----------|----------------|------|
-| `POST` | `/api/load_data` | データをベクトルDBに登録 |
-| `POST` | `/api/search` | クエリに基づくベクトル検索 |
-| `POST` | `/api/delete_data` | 指定データを削除 |
-| `GET` | `/api/health` | サーバーの稼働確認 |
+### 主なエンドポイント（抜粋）
 
-### 例
+| メソッド | パス | 概要 |
+|---|---|---|
+| `GET` | `/vector_search` | ベクトル検索（`query`, `category`, `num_results`） |
+| `GET` | `/get_documents` | ドキュメント取得（`source_ids`, `category_ids`） |
+| `POST` | `/upsert_documents` | ドキュメント upsert |
+| `DELETE` | `/delete_documents` | ドキュメント削除 |
+| `GET` | `/get_categories` | カテゴリ一覧 |
+| `GET` | `/get_relations` | リレーション一覧 |
+| `GET` | `/get_tags` | タグ一覧 |
+| `POST` | `/load_documents_from_excel` | Excel からロード |
+| `GET` | `/unload_documents_to_excel` | Excel へエクスポート |
+| `DELETE` | `/delete_documents_from_excel` | Excel 指定で削除 |
 
+例（検索）:
 ```bash
-curl -X POST http://localhost:8000/api/search -H "Content-Type: application/json" -d '{"query": "AIとは何か？"}'
+curl 'http://localhost:8000/vector_search?query=AI%E3%81%A8%E3%81%AF%E4%BD%95%E3%81%8B%EF%BC%9F&num_results=5'
 ```
 
 ---
 
-## MCPサーバー
+## MCP サーバー（FastMCP）
 
-`vector_search_util` は MCP (Model Context Protocol) サーバーとしても動作します。  
-外部ツールやAIエージェントからベクトル検索機能を利用可能です。
+`mcp/mcp_server.py` は MCP サーバーとして動作します。
 
 ### 起動方法
 
+標準入出力（stdio）:
 ```bash
-uv run -m vector_search_util.mcp.mcp_server
+uv run -m vector_search_util.mcp.mcp_server -m stdio
 ```
 
-### 主な機能
-- ベクトル検索APIの提供
-- LangChainベースの埋め込み生成
-- OpenAIまたはAzure OpenAIを利用したLLM連携
-- MCPツール経由での外部連携（例：AIChatUtil, WebSearchUtil など）
+Streamable HTTP:
+```bash
+uv run -m vector_search_util.mcp.mcp_server -m http -p 5001
+```
+
+### 引数
+
+| オプション | 説明 |
+|---|---|
+| `-m, --mode` | `http` または `stdio`（デフォルト: `stdio`） |
+| `-p, --port` | HTTP のポート（デフォルト: 5001） |
+| `-t, --tools` | 登録するツールをカンマ区切りで指定（未指定時は主要ツールを一括登録） |
+| `-v, --log_level` | ログレベル（空ならデフォルト） |
+
+---
+
+## Docker（MCP サーバーを HTTP で起動）
+
+このリポジトリの `docker-compose.yml` は MCP サーバーを **Streamable HTTP** で起動する設定です。
+
+```bash
+cd vector-search-util
+cp .env_template .env
+# 必要に応じて .env の HOST_PORT を変更
+
+docker compose up --build
+```
+
+- コンテナ内ポート: `5001`（固定）
+- ホスト公開ポート: `.env` の `HOST_PORT`（未指定なら `5001`）
 
 ---
 
@@ -205,100 +307,60 @@ uv run -m vector_search_util.mcp.mcp_server
 
 ```
 src/vector_search_util/
-├── langchain/        # LangChainクライアント・ベクトルDB関連
-├── llm/              # 埋め込みモデル設定
-├── log/              # ログ設定
-├── mcp/              # MCPサーバー実装
-├── util/             # loader.py, search.py などのユーティリティ
-└── __main__.py       # CLIエントリーポイント
+├── _internal/         # LangChain/DB/ログ等の内部実装
+├── api/               # FastAPI サーバー
+├── core/              # EmbeddingClient / BatchClient
+├── mcp/               # MCP サーバー
+├── model/             # EmbeddingConfig / Pydantic model / ConditionContainer
+└── __main__.py        # CLI エントリーポイント
 ```
 
 ---
 
-## インストール
+## 環境変数（.env）
 
-### 前提条件
+`.env_template` を参照してください（主要項目のみ抜粋）。
 
-- [Python 3.10+](https://www.python.org/downloads/)
-- [uv](https://github.com/astral-sh/uv)
+### メタデータキー
 
-### セットアップ手順
+| 変数名 | デフォルト | 説明 |
+|---|---:|---|
+| `SOURCE_ID_KEY` | `source_id` | source_id として扱うメタデータキー |
+| `CATEGORY_KEY` | `category` | category として扱うメタデータキー |
+| `SOURCE_CONTENT_KEY` | `source_content` | 本文キー |
+| `UPDATED_AT_KEY` | `updated_at` | 更新日時キー |
+| `FIRST_DOCUMENT_KEY` | `first_document` | chunk 先頭判定キー |
 
-```bash
-uv sync
-```
+### 動作設定
 
-これにより、`pyproject.toml` に基づいて仮想環境が構築され、依存パッケージがインストールされます。
+| 変数名 | デフォルト | 説明 |
+|---|---:|---|
+| `CHUNK_SIZE` | `4000` | ベクトル化前の分割サイズ |
+| `EMBEDDING_CONCURRENCY` | `16` | 非同期処理の並列度 |
+| `APP_DATA_PATH` | `work/app_data` | SQLite（管理DB）の保存先 |
 
----
+### Vector DB
 
-## 依存関係
+| 変数名 | 例 | 説明 |
+|---|---|---|
+| `VECTOR_DB_TYPE` | `chroma` / `pgvector` | ベクトルDB種別 |
+| `VECTOR_DB_URL` | `work/chroma_db` / `postgresql+psycopg://...` | 保存先 or 接続文字列 |
+| `VECTOR_DB_COLLECTION_NAME` | `sample_collection` | コレクション名 |
 
-主要な依存パッケージは `requirements.txt` に記載されています。  
-例：
-```
-langchain
-chromadb
-sqlalchemy
-pandas
-tqdm
-```
+### LLM/Embedding
 
----
-
-## 環境変数設定
-
-このプロジェクトでは `.env` ファイルを使用して環境変数を管理します。  
-`.env_template` を参考に `.env` ファイルを作成してください。
-
-例：
-
-```
-APP_DATA_PATH=work/app_data
-VECTOR_DB_TYPE=chroma
-VECTOR_DB_URL=work/chroma_db
-VECTOR_DB_COLLECTION_NAME=sample_collection
-SOURCE_ID_KEY=source_id
-CATEGORY_KEY=category
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_api_key_here
-OPENAI_COMPLETION_MODEL=gpt-4o
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-# OPENAI_BASE_URL=
-# AZURE_OPENAI_API_VERSION=
-# AZURE_OPENAI_ENDPOINT=
-```
-
-### 主な環境変数の説明
-
-| 変数名 | 説明 |
-|--------|------|
-| `APP_DATA_PATH` | SQLiteなどのアプリデータ保存先 |
-| `VECTOR_DB_TYPE` | 使用するベクトルDBの種類（`chroma` または `pgvector`） |
-| `VECTOR_DB_URL` | ベクトルDBの保存先または接続URL |
-| `VECTOR_DB_COLLECTION_NAME` | コレクション名 |
-| `SOURCE_ID_KEY` | データ登録時のソースIDキー |
-| `CATEGORY_KEY` | データ登録時のカテゴリキー |
-| `LLM_PROVIDER` | 使用するLLMプロバイダ（`openai` または `azure_openai`） |
-| `OPENAI_API_KEY` | OpenAI APIキー |
-| `OPENAI_COMPLETION_MODEL` | OpenAIの生成モデル名 |
-| `OPENAI_EMBEDDING_MODEL` | 埋め込みモデル名 |
-| `OPENAI_BASE_URL` | OpenAI互換エンドポイント（任意） |
-| `AZURE_OPENAI_API_VERSION` | Azure OpenAIのAPIバージョン |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAIのエンドポイント |
+| 変数名 | 例 | 説明 |
+|---|---|---|
+| `LLM_PROVIDER` | `openai` / `azure_openai` | プロバイダ |
+| `OPENAI_API_KEY` | `...` | APIキー |
+| `OPENAI_COMPLETION_MODEL` | `gpt-5` | 生成モデル |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | 埋め込みモデル |
+| `OPENAI_BASE_URL` | `http://...` | OpenAI互換エンドポイント（任意） |
+| `AZURE_OPENAI_API_VERSION` | `2024-xx-xx` | Azure OpenAI の API version |
+| `AZURE_OPENAI_ENDPOINT` | `https://...` | Azure OpenAI endpoint |
 
 ---
 
-## 使用例
+## 変更履歴
 
-### Excelデータの登録
-
-```bash
-uv run -m vector_search_util load_data -f data.xlsx -c content -i source_id -m category author
-```
-
-### ベクトル検索の実行
-
-```bash
-uv run -m vector_search_util search --query "AIとは何か？" -k 5 -f filter.json
-```
+- README は現状の実装（CLI/API/MCP/Docker/環境変数）に合わせて記載しています。
