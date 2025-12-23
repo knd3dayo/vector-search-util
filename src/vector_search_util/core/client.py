@@ -183,10 +183,15 @@ class EmbeddingBatchClient:
         progress.bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
 
         concurrency  = int(self.embedding_client.config.concurrency)
-        async with asyncio.Semaphore(concurrency):
-            tasks = [self._process_row_(i, data, progress, append_vectors) for i, data in enumerate(data_list)]
-            await asyncio.gather(*tasks)
-            progress.close()
+        sem = asyncio.Semaphore(concurrency)
+
+        async def wrapped(row_num: int, data: SourceDocumentData):
+            async with sem:
+                return await self._process_row_(row_num, data, progress, append_vectors)
+
+        tasks = [wrapped(i, data) for i, data in enumerate(data_list)]
+        await asyncio.gather(*tasks)
+        progress.close()
 
     def __create_documents_from_dataframe__(
         self, df: DataFrame, content_column: str, source_id_column: str, category_column: str, metadata_columns: list[str]
@@ -282,10 +287,15 @@ class CategoryBatchClient:
         progress.bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
 
         concurrency  = int(self.embedding_client.config.concurrency)
-        async with asyncio.Semaphore(concurrency):
-            tasks = [self._process_row_(i, data, progress) for i, data in enumerate(data_list)]
-            await asyncio.gather(*tasks)
-            progress.close()
+        sem = asyncio.Semaphore(concurrency)
+
+        async def wrapped(row_num: int, data: CategoryData):
+            async with sem:
+                return await self._process_row_(row_num, data, progress)
+
+        tasks = [wrapped(i, data) for i, data in enumerate(data_list)]
+        await asyncio.gather(*tasks)
+        progress.close()
 
     def create_category_data_from_dataframe(
         self, df: DataFrame, name_column: str, description_column: str, metadata_columns: list[str]
@@ -376,10 +386,15 @@ class RelationBatchClient:
         progress.bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
 
         concurrency  = int(self.embedding_client.config.concurrency)
-        async with asyncio.Semaphore(concurrency):
-            tasks = [self._process_row_(i, data, progress) for i, data in enumerate(data_list)]
-            await asyncio.gather(*tasks)
-            progress.close()
+        sem = asyncio.Semaphore(concurrency)
+
+        async def wrapped(row_num: int, data: RelationData):
+            async with sem:
+                return await self._process_row_(row_num, data, progress)
+
+        tasks = [wrapped(i, data) for i, data in enumerate(data_list)]
+        await asyncio.gather(*tasks)
+        progress.close()
 
     def create_relation_data_from_dataframe(
         self, df: DataFrame, from_node_column: str, to_node_column: str, edge_type_column: str, metadata_columns: list[str]
