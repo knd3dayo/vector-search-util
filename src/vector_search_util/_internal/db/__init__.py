@@ -1,6 +1,8 @@
 import os, json
 import aiosqlite
 import sqlite3
+import asyncio
+
 from vector_search_util.model import CategoryData, RelationData, TagData, SourceDocumentData, ConditionContainer
 
 # sqlite3
@@ -8,6 +10,7 @@ class SQLiteClient:
     initialized: bool = False 
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self.lock = asyncio.Lock()
         if not SQLiteClient.initialized:
             dirname = os.path.dirname(self.db_path)
             if not os.path.exists(dirname):
@@ -123,40 +126,42 @@ class SQLiteClient:
                 return documents
 
     async def upsert_source_documents(self, documents: list[SourceDocumentData]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    INSERT INTO documents (source_id, source_content, metadata)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(source_id) DO UPDATE SET 
-                        source_content=excluded.source_content,
-                        metadata=excluded.metadata
-                ''', [
-                    (
-                        doc.source_id, 
-                        doc.source_content, 
-                        json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else None
-                    ) 
-                    for doc in documents
-                ])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        INSERT INTO documents (source_id, source_content, metadata)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(source_id) DO UPDATE SET 
+                            source_content=excluded.source_content,
+                            metadata=excluded.metadata
+                    ''', [
+                        (
+                            doc.source_id, 
+                            doc.source_content, 
+                            json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else None
+                        ) 
+                        for doc in documents
+                    ])
+                await conn.commit()
 
     async def delete_source_documents(self, source_ids: list[str]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    DELETE FROM documents WHERE source_id = ?
-                ''', [(source_id,) for source_id in source_ids])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        DELETE FROM documents WHERE source_id = ?
+                    ''', [(source_id,) for source_id in source_ids])
+                await conn.commit()
 
     async def delete_all_source_documents(self):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
-                    DELETE FROM documents
-                ''')
-            await conn.commit()
-
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('''
+                        DELETE FROM documents
+                    ''')
+                await conn.commit()
     async def get_categories(self, names: list[str] = [], conditions: ConditionContainer = ConditionContainer()) -> list[CategoryData]:
         if names:
             conditions.add_in_condition("name", names)
@@ -175,27 +180,30 @@ class SQLiteClient:
                 return categories
 
     async def delete_categories(self, names: list[str]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    DELETE FROM categories WHERE name = ?
-                ''', [(name,) for name in names])
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        DELETE FROM categories WHERE name = ?
+                    ''', [(name,) for name in names])
             await conn.commit()
 
     async def upsert_categories(self, category_list: list[CategoryData]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    INSERT INTO categories (name, description, metadata)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
-                ''', [(category.name, category.description, json.dumps(category.metadata, ensure_ascii=False) if category.metadata else None) for category in category_list])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        INSERT INTO categories (name, description, metadata)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
+                    ''', [(category.name, category.description, json.dumps(category.metadata, ensure_ascii=False) if category.metadata else None) for category in category_list])
+                await conn.commit()
     
     async def delete_all_categories(self):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('''
                     DELETE FROM categories
                 ''')
             await conn.commit()
@@ -235,30 +243,34 @@ class SQLiteClient:
                 return relations
 
     async def upsert_relations(self, relations: list[RelationData]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    INSERT INTO relations (from_node, to_node, edge_type, metadata)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(from_node, to_node, edge_type) DO UPDATE SET metadata=excluded.metadata
-                ''', [(relation.from_node, relation.to_node, relation.edge_type, json.dumps(relation.metadata, ensure_ascii=False) if relation.metadata else None) for relation in relations if relation.is_valid()])
-            await conn.commit()
+    
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        INSERT INTO relations (from_node, to_node, edge_type, metadata)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(from_node, to_node, edge_type) DO UPDATE SET metadata=excluded.metadata
+                    ''', [(relation.from_node, relation.to_node, relation.edge_type, json.dumps(relation.metadata, ensure_ascii=False) if relation.metadata else None) for relation in relations if relation.is_valid()])
+                await conn.commit()
 
     async def delete_relations(self, relations: list[RelationData]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    DELETE FROM relations WHERE from_node = ? AND to_node = ? AND edge_type = ?
-                ''', [(relation.from_node, relation.to_node, relation.edge_type) for relation in relations])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        DELETE FROM relations WHERE from_node = ? AND to_node = ? AND edge_type = ?
+                    ''', [(relation.from_node, relation.to_node, relation.edge_type) for relation in relations])
+                await conn.commit()
 
     async def delete_all_relations(self):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
-                    DELETE FROM relations
-                ''')
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('''
+                        DELETE FROM relations
+                    ''')
+                await conn.commit()
 
     async def get_tags(self, names: list[str]) -> list[TagData]:
         conditions = []
@@ -276,30 +288,33 @@ class SQLiteClient:
                 return tags
         
     async def upsert_tags(self, tag_list: list[TagData]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    INSERT INTO tags (name, description, metadata)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
-                ''', [(tag.name, tag.description, json.dumps(tag.metadata, ensure_ascii=False) if tag.metadata else None) for tag in tag_list])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        INSERT INTO tags (name, description, metadata)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(name) DO UPDATE SET description=excluded.description, metadata=excluded.metadata
+                    ''', [(tag.name, tag.description, json.dumps(tag.metadata, ensure_ascii=False) if tag.metadata else None) for tag in tag_list])
+                await conn.commit()
 
     async def delete_tags(self, names: list[str]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    DELETE FROM tags WHERE name = ?
-                ''', [(name,) for name in names])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        DELETE FROM tags WHERE name = ?
+                    ''', [(name,) for name in names])
+                await conn.commit()
 
     async def delete_all_tags(self):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
-                    DELETE FROM tags
-                ''')
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('''
+                        DELETE FROM tags
+                    ''')
+                await conn.commit()
 
     async def upsert_new_tags(self, data_list_metadata_keys_set: set[str]):
         existing = {t.name for t in await self.get_tags(list(data_list_metadata_keys_set))}
@@ -334,27 +349,30 @@ class SQLiteClient:
 
 
     async def upsert_conditions(self, conditions: list[ConditionContainer]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    INSERT INTO conditions (name, condition_data, metadata)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(name) DO UPDATE SET condition_data=excluded.condition_data, metadata=excluded.metadata
-                ''', [(condition.name, json.dumps(condition.model_dump(exclude={"name"}), ensure_ascii=False), json.dumps(condition.metadata, ensure_ascii=False) if condition.metadata else None) for condition in conditions])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        INSERT INTO conditions (name, condition_data, metadata)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(name) DO UPDATE SET condition_data=excluded.condition_data, metadata=excluded.metadata
+                    ''', [(condition.name, json.dumps(condition.model_dump(exclude={"name"}), ensure_ascii=False), json.dumps(condition.metadata, ensure_ascii=False) if condition.metadata else None) for condition in conditions])
+                await conn.commit()
     
     async def delete_conditions(self, names: list[str]):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.executemany('''
-                    DELETE FROM conditions WHERE name = ?
-                ''', [(name,) for name in names])
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.executemany('''
+                        DELETE FROM conditions WHERE name = ?
+                    ''', [(name,) for name in names])
+                await conn.commit()
 
     async def delete_all_conditions(self):
-        async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
-                    DELETE FROM conditions
-                ''')
-            await conn.commit()
+        async with self.lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('''
+                        DELETE FROM conditions
+                    ''')
+                await conn.commit()
