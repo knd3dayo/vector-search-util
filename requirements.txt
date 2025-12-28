@@ -5,6 +5,8 @@ pydantic
 # For Langchain
 langchain
 langchain-openai
+langchain-aws
+langchain-google-genai
 langchain-community
 langchain-chroma
 langchain-postgres

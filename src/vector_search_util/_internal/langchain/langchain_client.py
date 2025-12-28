@@ -12,18 +12,6 @@ class LangchainClient:
     llm_config: EmbeddingConfig = EmbeddingConfig()
     embedding: Embeddings | None = None
 
-    @classmethod
-    def create_client(cls, llm_config: EmbeddingConfig) -> 'LangchainClient':
-
-        if llm_config.llm_provider == "openai":
-            client = LangchainOpenAIClient(llm_config)
-            return client
-        elif llm_config.llm_provider == "azure_openai":
-            client = LangchainAzureOpenAIClient(llm_config)
-            return client
-        else:
-            raise ValueError(f"Unsupported LLM provider: {llm_config.llm_provider}")
-
         
 class LangchainOpenAIClient(LangchainClient):
 

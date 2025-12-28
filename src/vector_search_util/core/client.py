@@ -12,6 +12,7 @@ from vector_search_util._internal.db import SQLiteClient
 
 from vector_search_util._internal.langchain.langchain_vector_db import LangChainVectorDB
 from vector_search_util._internal.langchain.langchain_client import LangchainClient
+from vector_search_util._internal.langchain.langchain_factory import LangchainFactory
 
 import vector_search_util._internal.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
@@ -23,7 +24,7 @@ class EmbeddingClient:
             config = EmbeddingConfig()
         self.config = config
 
-        self.client = LangchainClient.create_client(config)
+        self.client = LangchainFactory.create_client(config)
         self.vector_db = LangChainVectorDB.create_vector_db(self.client)
         self.category_db_path: str = os.path.join(self.config.app_data_path, "vector_db_search_app.db")
         self.sqlite_client = SQLiteClient(self.category_db_path)
