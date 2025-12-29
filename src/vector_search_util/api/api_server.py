@@ -55,6 +55,12 @@ router.add_api_route(
     endpoint=app_module.delete_documents,
     methods=["DELETE"])
 
+# update document metadata
+router.add_api_route(
+    path="/update_document_metadata",
+    endpoint=app_module.update_document_metadata,
+    methods=["PUT"])
+
 # get categories
 router.add_api_route(
     path="/get_categories",
@@ -123,6 +129,11 @@ router.add_api_route(
     path="/delete_documents_from_excel",
     endpoint=app_module.delete_documents_from_excel,
     methods=["DELETE"])
+
+router.add_api_route(
+    path="/refresh_metadata_from_excel",
+    endpoint=app_module.refresh_metadata_from_excel,
+    methods=["POST"])
 
 router.add_api_route(
     path="/load_categories_from_excel",

@@ -103,12 +103,12 @@ class SourceDocumentData(BaseModel):
         """Convert to Langchain Document."""
         documents: list[Document] = []
         for data in data_list:
-            docs = cls.__to_langchain_documents_from_single__(data, append_vectors)
+            docs = cls.__to_langchain_documents_from_single_source_document__(data, append_vectors)
             documents.extend(docs)
         return documents
 
     @classmethod
-    def __to_langchain_documents_from_single__(cls, data: "SourceDocumentData", append_vectors: bool = False) -> list[Document]:
+    def __to_langchain_documents_from_single_source_document__(cls, data: "SourceDocumentData", append_vectors: bool = False) -> list[Document]:
         """Convert to Langchain Document."""
         embedding_config = cls._get_embedding_config_()
         documents: list[Document] = []

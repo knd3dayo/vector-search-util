@@ -125,6 +125,21 @@ async def delete_documents(
     embedding_client = EmbeddingClient(config)
     await embedding_client.delete_documents_by_source_ids(source_id_list, filter)
 
+async def update_document_metadata(
+    source_id: Annotated[str, "A source ID of a document to update metadata for."],
+    metadata: Annotated[dict[str, str], "A dictionary of metadata to update for the documents."],
+):
+    """Update metadata for a list of documents in the vector database.
+
+    Args:
+        source_id (str): A source ID of a document to update metadata for.
+        metadata (dict[str, str]): A dictionary of metadata to update for the documents.
+    """
+
+    config = EmbeddingConfig()
+    embedding_client = EmbeddingClient(config)
+    await embedding_client.update_metadata([source_id], metadata)
+
 # get categories
 async def get_categories(
     name_list: Annotated[list[str], "A list of category names to retrieve."] = [],
@@ -254,6 +269,24 @@ async def delete_tags(
     config = EmbeddingConfig()
     embedding_client = EmbeddingClient(config)
     await embedding_client.delete_tags(name_list)
+
+async def refresh_metadata_from_excel(
+        file_path: Annotated[str, "The path to the Excel file."],
+        source_id_column: Annotated[str, "The name of the column containing source IDs."] = "source_id",
+        metadata_columns: Annotated[list[str], "A list of column names to include as metadata."] = []
+    ):
+    """Refresh metadata in the vector database based on an Excel file. 
+    Args:
+        file_path (str): The path to the Excel file.
+        source_id_column (str): The name of the column containing source IDs.
+        category_column (str): The name of the column containing categories.
+        metadata_columns (list[str]): A list of column names to include as metadata.
+    """
+    embedding_client = EmbeddingClient()
+    batch_client = EmbeddingBatchClient(embedding_client)
+    await batch_client.refresh_metadata_from_excel(
+        file_path, source_id_column, metadata_columns
+    )
 
 async def load_documents_from_excel(
         file_path: Annotated[str, "The path to the Excel file."],

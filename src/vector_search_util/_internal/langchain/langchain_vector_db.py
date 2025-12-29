@@ -39,6 +39,11 @@ class LangChainVectorDB(ABC):
     def _get_documents_(self, conditions: ConditionContainer = ConditionContainer()) -> Tuple[List[str], List[Document]]:
         pass
 
+    @abstractmethod
+    # メタデータのみ更新する
+    def _update_metadata_(self, doc_ids: list[str], metadata: dict[str, Any]) -> bool:
+        pass
+
     def _create_search_kwargs_(self, k: int, conditions: ConditionContainer = ConditionContainer()) -> dict[str, Any]:
         search_kwargs: dict[str, Any] = {"k": k}
         filter = conditions.build()
@@ -95,17 +100,37 @@ class LangChainVectorDB(ABC):
             return
         await self.delete_documents_by_ids(vector_ids)
 
+    async def update_metadata(self, source_ids: list[str], metadata: dict[str, Any]) -> bool:
+        # Chroma は空の metadata ({}) での update を許容しない。
+        # CLI 側の引数ミスや、更新対象カラムが空のケースでは安全に no-op とする。
+        if not metadata:
+            logger.info("Skip metadata update because metadata is empty.")
+            return False
+
+        for source_id in source_ids:
+            condition = ConditionContainer().add_eq_condition(
+                self.client.llm_config.source_id_key, source_id
+                )
+            ids, _ = await self.get_documents(condition)
+            if len(ids) == 0:
+                logger.info(f"Document not found for metadata update: {metadata}")
+                continue
+            doc_ids = ids
+            self._update_metadata_(doc_ids, metadata)
+
+        return True
+
     async def upsert_documents(self, data_list: list[Document], append_vectors: bool = False) -> bool:
         
-        # 既に存在するドキュメントを削除
-        conditions = ConditionContainer().add_in_condition(
-            self.client.llm_config.source_id_key, [ data.metadata.get(self.client.llm_config.source_id_key, "") for data in data_list ]
-            )
         if not append_vectors:
+            # 既に存在するドキュメントを削除
+            conditions = ConditionContainer().add_in_condition(
+                self.client.llm_config.source_id_key, [ data.metadata.get(self.client.llm_config.source_id_key, "") for data in data_list ]
+                )
             await self.delete_documents_by_tags(conditions)
+
         else:
             logger.info("append_vectors is True. skip delete existing documents.")
-            existing_ids, exsisting_docs = await self.get_documents(conditions)
             
         # ドキュメントを格納する。
         await self.add_documents(data_list)
@@ -195,6 +220,13 @@ class LangChainVectorDBChroma(LangChainVectorDB):
             )
         self.db = db
 
+    # メタデータのみ更新する
+    def _update_metadata_(self, doc_ids: list[str], metadata: dict[str, Any]) -> bool:
+        if self.db is None:
+            raise ValueError("db is None")
+        for doc_id in doc_ids:
+            self.db._collection.update(ids=[doc_id], metadatas=[metadata]) # type: ignore
+        return True
 
     def _get_documents_(self, conditions: ConditionContainer = ConditionContainer()) -> Tuple[List[str], List[Document]]:
         ids=[]
@@ -213,8 +245,6 @@ class LangChainVectorDBChroma(LangChainVectorDB):
         ids.extend(doc_dict.get("ids", []))
         content_list = doc_dict.get("documents", [])
         metadata_list: list[dict[str, Any]] = doc_dict.get("metadatas", [])
-        source_id_key = self.client.llm_config.source_id_key
-        category_key = self.client.llm_config.category_key
 
         documents = [
             Document(
@@ -247,6 +277,20 @@ class LangChainVectorDBPGVector(LangChainVectorDB):
             )
         self.db = db
 
+    # メタデータのみ更新する
+    def _update_metadata_(self, doc_ids: list[str], metadata: dict[str, Any]) -> bool:
+        if self.db is None:
+            raise ValueError("db is None")
+        metadata_json = json.dumps(metadata, ensure_ascii=False)
+        engine = sqlalchemy.create_engine(self.vector_db_url)
+        with Session(engine) as session:
+            stmt = text("UPDATE langchain_pg_embedding SET metadata: metadata  WHERE document_id in :document_ids").bindparams(
+                metadata=metadata_json,
+                document_ids=doc_ids)
+            session.execute(stmt)
+            session.commit()
+        return True
+        
     def _get_documents_(self, conditions: Optional[ConditionContainer] = None) -> Tuple[List[str], List[Document]]:
         engine = sqlalchemy.create_engine(self.vector_db_url)
         with Session(engine) as session:

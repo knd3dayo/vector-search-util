@@ -39,6 +39,12 @@ async def main():
     delete_parser.add_argument("-i", "--input_file_path", type=str, help="Path to the Excel file containing source IDs to delete.")
     delete_parser.add_argument("--source_id_column", type=str, default="source_id", help="Name of the source_id column.")
 
+    # refresh_metadata サブコマンド
+    refresh_metadata_parser = subparsers.add_parser("refresh_metadata", help="Refresh metadata for documents in the vector DB")
+    refresh_metadata_parser.add_argument("-i", "--input_file_path", type=str, help="Path to the Excel file containing updated metadata.")
+    refresh_metadata_parser.add_argument("-m", "--metadata_columns", type=str, nargs="*", default=[], help="List of metadata column names.")
+    refresh_metadata_parser.add_argument("--source_id_column", type=str, default="source_id", help="Name of the source_id column.")
+    
     # list_category サブコマンド
     list_category_parser = subparsers.add_parser("list_category", help="List all categories in the vector DB.")
 
@@ -172,6 +178,19 @@ async def main():
             sys.exit(1)
         source_id_column = args.source_id_column
         await app_module.delete_documents_from_excel(input_file_path, source_id_column)
+
+    elif args.command == "refresh_metadata":
+        input_file_path = args.input_file_path
+        if not input_file_path:
+            refresh_metadata_parser.print_help()
+            sys.exit(1)
+        source_id_column = args.source_id_column
+        metadata_columns = args.metadata_columns
+        await app_module.refresh_metadata_from_excel(
+            file_path=input_file_path,
+            source_id_column=source_id_column,
+            metadata_columns=metadata_columns,
+        )
 
     elif args.command == "list_category":
         categories = await app_module.get_categories()

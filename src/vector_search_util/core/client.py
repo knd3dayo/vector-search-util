@@ -103,6 +103,10 @@ class EmbeddingClient:
             # metadataに新規タグがあれば追加
             await self.sqlite_client.upsert_new_tags(data_list_metadata_keys_set)
 
+    async def update_metadata(self, source_ids: list[str], metadata: dict[str, Any]) -> bool:
+        result = await self.vector_db.update_metadata(source_ids, metadata)
+        return result
+
     async def upsert_documents(self, data_list: list[SourceDocumentData], append_vectors: bool = False):
         result = await self.vector_db.upsert_documents(SourceDocumentData.to_langchain_documents(data_list), append_vectors)
 
@@ -221,6 +225,20 @@ class EmbeddingBatchClient:
         await asyncio.gather(*tasks)
         progress.close()
 
+    def __create_metadata_documents_from_dataframe__(
+        self, df: DataFrame, source_id_column: str, metadata_columns: list[str]
+    ) -> list[tuple[str, dict[str, Any]]]:
+        result: list[tuple[str, dict[str, Any]]] = []
+        for _, row in df.iterrows():
+            source_id = row.get(source_id_column, "")
+            if not source_id:
+                continue
+            metadata = {}
+            for key in metadata_columns:
+                metadata[key] = row.get(key, "")
+            result.append((str(source_id), metadata))
+        return result
+    
     def __create_documents_from_dataframe__(
         self, df: DataFrame, content_column: str, source_id_column: str, category_column: str, metadata_columns: list[str]
     ) -> list[SourceDocumentData]:
@@ -256,6 +274,15 @@ class EmbeddingBatchClient:
             condition.add_in_condition(key, values)
         await self.embedding_client.delete_documents_by_source_ids(source_id_list, condition)
     
+    async def refresh_metadata_from_excel(
+        self, file_path: str, source_id_column: str, metadata_columns: list[str]
+    ):
+        df = pd.read_excel(file_path, dtype=str, na_values=[])
+        df = _remove_excel_x000d_artifact(df)
+        entries = self.__create_metadata_documents_from_dataframe__(df, source_id_column, metadata_columns)
+        for source_id, metadata in entries:
+            await self.embedding_client.update_metadata([source_id], metadata)
+
     async def load_documents_from_excel(
         self, file_path: str, content_column: str, source_id_column: str, category_column: str, 
         metadata_columns: list[str], append_vectors: bool = False

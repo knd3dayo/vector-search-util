@@ -8,6 +8,7 @@ from vector_search_util.core.app import (
     get_documents,
     upsert_documents,
     delete_documents,
+    update_document_metadata,
     get_categories,
     upsert_categories,
     delete_categories,
@@ -60,6 +61,7 @@ async def main():
         mcp.tool()(get_documents)
         mcp.tool()(upsert_documents)
         mcp.tool()(delete_documents)
+        mcp.tool()(update_document_metadata)
         mcp.tool()(get_categories)
         mcp.tool()(upsert_categories)
         mcp.tool()(delete_categories)
