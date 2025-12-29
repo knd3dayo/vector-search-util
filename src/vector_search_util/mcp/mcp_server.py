@@ -2,8 +2,9 @@ import asyncio
 import argparse
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from vector_search_util.api.api_server import (
+from vector_search_util.core.app import (
     vector_search,
+    metadata_search,
     get_documents,
     upsert_documents,
     delete_documents,
@@ -55,6 +56,7 @@ async def main():
     else:
         # デフォルトのツールを登録
         mcp.tool()(vector_search)
+        mcp.tool()(metadata_search)
         mcp.tool()(get_documents)
         mcp.tool()(upsert_documents)
         mcp.tool()(delete_documents)

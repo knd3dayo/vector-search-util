@@ -186,7 +186,7 @@ class SQLiteClient:
                     await cur.executemany('''
                         DELETE FROM categories WHERE name = ?
                     ''', [(name,) for name in names])
-            await conn.commit()
+                await conn.commit()
 
     async def upsert_categories(self, category_list: list[CategoryData]):
         async with self.lock:
@@ -206,7 +206,7 @@ class SQLiteClient:
                     await cur.execute('''
                     DELETE FROM categories
                 ''')
-            await conn.commit()
+                await conn.commit()
 
     async def upsert_new_categories(self, data_list_category_names_set: set[str]):
         existing_category_names_set = set([category.name for category in await self.get_categories()])

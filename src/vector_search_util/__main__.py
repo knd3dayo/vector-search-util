@@ -2,9 +2,7 @@ import argparse
 import sys
 import asyncio
 import json
-import vector_search_util.api.api_server as api_server
-
-from vector_search_util.core.client import EmbeddingClient
+import vector_search_util.core.app as app_module
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -12,11 +10,15 @@ async def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # search サブコマンド
-    search_parser = subparsers.add_parser("search", help="Execute search process")
-    search_parser.add_argument("-q", "--query", type=str, required=True, help="Search query text.")
-    search_parser.add_argument("-c", "--category", type=str, default="", help="Category to filter search results.")
-    search_parser.add_argument("-k", "--top_k", type=int, default=5, help="Number of top results to return.")
+    # vector_search サブコマンド
+    vector_search_parser = subparsers.add_parser("vector_search", help="Execute search process")
+    vector_search_parser.add_argument("-q", "--query", type=str, required=True, help="Search query text.")
+    vector_search_parser.add_argument("-c", "--category", type=str, default="", help="Category to filter search results.")
+    vector_search_parser.add_argument("-k", "--top_k", type=int, default=5, help="Number of top results to return.")
+
+    # metadata_search サブコマンド
+    metadata_search_parser = subparsers.add_parser("metadata_search", help="Execute metadata search process")
+    metadata_search_parser.add_argument("-c", "--conditions", type=str, default="{}", help="Conditions to filter metadata search results.")
 
     # load_data サブコマンド
     load_parser = subparsers.add_parser("load_data", help="Execute data loading process")
@@ -65,10 +67,12 @@ async def main():
     relation_load_parser.add_argument("--from_node_column", type=str, default="from_node", help="Name of the from_node column. default is 'from_node'.")
     relation_load_parser.add_argument("--to_node_column", type=str, default="to_node", help="Name of the to_node column. default is 'to_node'.")
     relation_load_parser.add_argument("--edge_type_column", type=str, default="edge_type", help="Name of the edge_type column. default is 'edge_type'.")
+
     # unload_relation サブコマンド
     relation_unload_parser = subparsers.add_parser("unload_relation", help="Unload relations from vector DB to Excel file.")
     relation_unload_parser.add_argument("-o", "--output_file", type=str, help="Path to output file for unloaded relations.")
     relation_unload_parser.add_argument("-f", "--filter_file", type=str, help="Path to JSON file containing filter conditions.")
+
     # delete_relation サブコマンド
     relation_delete_parser = subparsers.add_parser("delete_relation", help="Delete relations from vector DB.")
     relation_delete_parser.add_argument("-i", "--input_file_path", type=str, help="Path to the Excel file containing relations to delete.")
@@ -100,16 +104,16 @@ async def main():
     args = parser.parse_args()
     print(f"Executing command: {args.command}")
 
-    if args.command == "search":
+    if args.command == "vector_search":
         query = args.query
         # queryが空文字の場合はsub_parserのhelpを表示して終了
         if not query.strip():
-            search_parser.print_help()
+            vector_search_parser.print_help()
             sys.exit(1)
         category = args.category
         num_results = args.top_k
 
-        results = await api_server.vector_search(query=query, category=category, num_results=num_results)
+        results = await app_module.vector_search(query=query, category=category, num_results=num_results)
 
         # 結果出力
         print("\n=== Search Results ===")
@@ -120,7 +124,28 @@ async def main():
             print(f"Updated At: {doc.updated_at}")
             print(f"Metadata: {json.dumps(doc.metadata, ensure_ascii=False)}")
             print("-" * 40)
-    
+
+    elif args.command == "metadata_search":
+        conditions_str = args.conditions
+        try:
+            conditions = json.loads(conditions_str)
+        except json.JSONDecodeError:
+            print("Error: conditions must be a valid JSON string.")
+            sys.exit(1)
+
+        condition_container = app_module.ConditionContainer.from_dict(conditions)
+        results = await app_module.metadata_search(conditions=condition_container)
+
+        # 結果出力
+        print("\n=== Metadata Search Results ===")
+        for i, doc in enumerate(results, start=1):
+            print(f"[{i}] {doc.source_content}")
+            print(f"Source ID: {doc.source_id}")
+            print(f"Category: {doc.category}")
+            print(f"Updated At: {doc.updated_at}")
+            print(f"Metadata: {json.dumps(doc.metadata, ensure_ascii=False)}")
+            print("-" * 40)
+
     elif args.command == "load_data":
         file_path = args.input_file_path
         if not file_path:
@@ -131,14 +156,14 @@ async def main():
         category_column = args.category_column
         metadata_columns = args.metadata_columns
         append_vectors = args.append_vectors
-        await api_server.load_documents_from_excel(file_path, content_column, source_id_column, category_column, metadata_columns, append_vectors)
+        await app_module.load_documents_from_excel(file_path, content_column, source_id_column, category_column, metadata_columns, append_vectors)
 
     elif args.command == "unload_data":
         output_file = args.output_file
         if not output_file:
             unload_parser.print_help()
             sys.exit(1)
-        await api_server.unload_documents_to_excel(output_file)
+        await app_module.unload_documents_to_excel(output_file)
 
     elif args.command == "delete_data":
         input_file_path = args.input_file_path
@@ -146,10 +171,10 @@ async def main():
             delete_parser.print_help()
             sys.exit(1)
         source_id_column = args.source_id_column
-        await api_server.delete_documents_from_excel(input_file_path, source_id_column)
+        await app_module.delete_documents_from_excel(input_file_path, source_id_column)
 
     elif args.command == "list_category":
-        categories = await api_server.get_categories()
+        categories = await app_module.get_categories()
         print("\n=== Categories in Vector DB ===")
         for i, cat in enumerate(categories, start=1):
             print(f"[{i}] Name: {cat.name}, Description: {cat.description}")
@@ -162,14 +187,14 @@ async def main():
         name_column = args.name_column
         description_column = args.description_column
         metadata_columns = args.metadata_columns
-        await api_server.load_categories_from_excel(input_file_path, name_column, description_column, metadata_columns)
+        await app_module.load_categories_from_excel(input_file_path, name_column, description_column, metadata_columns)
 
     elif args.command == "unload_category":
         output_file = args.output_file
         if not output_file:
             category_unload_parser.print_help()
             sys.exit(1)
-        await api_server.unload_categories_to_excel(output_file)
+        await app_module.unload_categories_to_excel(output_file)
 
     elif args.command == "delete_category":
         input_file_path = args.input_file_path
@@ -177,10 +202,10 @@ async def main():
             category_delete_parser.print_help()
             sys.exit(1)
         name_column = args.name_column
-        await api_server.delete_category_data_from_excel(input_file_path, name_column)
+        await app_module.delete_category_data_from_excel(input_file_path, name_column)
 
     elif args.command == "list_relation":
-        relations = await api_server.get_relations()
+        relations = await app_module.get_relations()
         print("\n=== Relations in Vector DB ===")
         for i, relation in enumerate(relations, start=1):
             print(f"[{i}] From: {relation.from_node}, To: {relation.to_node}, Edge Type: {relation.edge_type}")
@@ -194,14 +219,14 @@ async def main():
         to_node_column = args.to_node_column
         edge_type_column = args.edge_type_column
         metadata_columns = args.metadata_columns
-        await api_server.load_relations_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column, metadata_columns)
+        await app_module.load_relations_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column, metadata_columns)
     
     elif args.command == "unload_relation":
         output_file = args.output_file
         if not output_file:
             relation_unload_parser.print_help()
             sys.exit(1)
-        await api_server.unload_relations_to_excel(output_file)
+        await app_module.unload_relations_to_excel(output_file)
     
     elif args.command == "delete_relation":
         input_file_path = args.input_file_path
@@ -211,10 +236,10 @@ async def main():
         from_node_column = args.from_node_column
         to_node_column = args.to_node_column
         edge_type_column = args.edge_type_column
-        await api_server.delete_relations_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column)
+        await app_module.delete_relations_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column)
 
     elif args.command == "list_tag":
-        tags = await api_server.get_tags()
+        tags = await app_module.get_tags()
         print("\n=== Tags in Vector DB ===")
         for i, tag in enumerate(tags, start=1):
             print(f"[{i}] Name: {tag.name}, Description: {tag.description}")
@@ -227,14 +252,14 @@ async def main():
         metadata_columns = args.metadata_columns
         name_column = args.name_column
         description_column = args.description_column
-        await api_server.load_tags_from_excel(input_file_path, name_column, description_column, metadata_columns)
+        await app_module.load_tags_from_excel(input_file_path, name_column, description_column, metadata_columns)
 
     elif args.command == "unload_tag":
         output_file = args.output_file
         if not output_file:
             tag_unload_parser.print_help()
             sys.exit(1)
-        await api_server.unload_tags_to_excel(output_file)
+        await app_module.unload_tags_to_excel(output_file)
 
     elif args.command == "delete_tag":
         input_file_path = args.input_file_path
@@ -242,7 +267,7 @@ async def main():
             tag_delete_parser.print_help()
             sys.exit(1)
         name_column = args.name_column
-        await api_server.delete_tags_from_excel(input_file_path, name_column)
+        await app_module.delete_tags_from_excel(input_file_path, name_column)
 
     else:
         parser.print_help()

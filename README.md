@@ -40,7 +40,8 @@ uv run -m vector_search_util <subcommand> --help
 
 ### サブコマンド一覧
 
-- `search` : ベクトル検索（カテゴリ絞り込みのみ対応）
+- `vector_search` : ベクトル検索（カテゴリ絞り込みのみ対応）
+- `metadata_search` : メタデータ条件検索（MongoDB 風 JSON 条件）
 - `load_data` / `unload_data` / `delete_data` : ドキュメント（Excel）
 - `list_category` / `load_category` / `unload_category` / `delete_category` : カテゴリ
 - `list_relation` / `load_relation` / `unload_relation` / `delete_relation` : リレーション
@@ -57,8 +58,33 @@ uv run -m vector_search_util <subcommand> --help
 
 例:
 ```bash
-uv run -m vector_search_util search -q "AIとは何か？" -k 5
-uv run -m vector_search_util search -q "AIとは何か？" -c "tech" -k 5
+uv run -m vector_search_util vector_search -q "AIとは何か？" -k 5
+uv run -m vector_search_util vector_search -q "AIとは何か？" -c "tech" -k 5
+```
+
+#### 🧾 metadata_search
+
+メタデータ検索は `-c/--conditions` に **JSON文字列** を渡して、MongoDB 風の条件指定で絞り込みを行います。
+
+| オプション | 説明 |
+|---|---|
+| `-c, --conditions` | 条件（JSON文字列、デフォルト: `{}`） |
+
+指定できる条件例（`ConditionContainer.from_dict` 相当）:
+
+- **eq**（完全一致）: `{"author":"alice"}`
+- **$in**（いずれかに一致）: `{"tag":{"$in":["a","b"]}}`
+- **$regex**（部分一致）: `{"title":{"$regex":"AI"}}`
+- **比較**（数値など）: `{"score":{"$gte":0.8}}`（`$gte/$lte/$gt/$lt`）
+- **論理**: `{"$and":[{"author":"alice"},{"score":{"$gte":0.8}}]}`（`$and/$or`）
+
+例:
+```bash
+# author == "alice"
+uv run -m vector_search_util metadata_search -c '{"author":"alice"}'
+
+# score >= 0.8 AND title contains "AI"
+uv run -m vector_search_util metadata_search -c '{"$and":[{"score":{"$gte":0.8}},{"title":{"$regex":"AI"}}]}'
 ```
 
 #### 📥 load_data

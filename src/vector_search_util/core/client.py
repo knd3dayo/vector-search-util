@@ -18,6 +18,25 @@ import vector_search_util._internal.log.log_settings as log_settings
 logger = log_settings.getLogger(__name__)
 
 
+def _remove_excel_x000d_artifact(df: DataFrame) -> DataFrame:
+    """Excel由来の改行ゴミ `_x000D_` を全カラムから除去する。
+
+    `DataFrame.replace` は pandas の将来互換警告対象なので使わず、
+    文字列の split/join でリテラル置換する。
+    """
+
+    if df is None or df.empty:
+        return df
+
+    for col in df.columns:
+        series = df[col]
+        # read_excel(dtype=str) を前提に、文字列カラムのみ処理
+        if series.dtype == object or pd.api.types.is_string_dtype(series):
+            df[col] = series.str.split("_x000D_", regex=False).str.join("")
+
+    return df
+
+
 class EmbeddingClient:
     def __init__(self, config: EmbeddingConfig = EmbeddingConfig()):
         if config is None:
@@ -36,6 +55,14 @@ class EmbeddingClient:
     async def vector_search(self, query: str, category: str = "", conditions: ConditionContainer = ConditionContainer(), top_k: int = 5) -> list[SourceDocumentData]:
         results = await self.vector_db.vector_search(query, category, conditions, top_k)
         return SourceDocumentData.from_langchain_documents(results, self.sqlite_client.get_content_by_source_id)
+
+    async def metadata_search(
+            self, 
+            condition: ConditionContainer = ConditionContainer()
+            ) -> tuple[list[str], list[SourceDocumentData]]:
+
+        ids, results = await self.vector_db.get_documents(condition)
+        return ids, SourceDocumentData.from_langchain_documents(results, self.sqlite_client.get_content_by_source_id)
 
     async def get_langchain_documents(
             self,
@@ -213,7 +240,7 @@ class EmbeddingBatchClient:
         self, file_path: str, source_id_column: str, category_column: str, tags: dict[str, list[str]] ={}
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
 
         source_id_list: list[str] = []
         if source_id_column in df.columns:
@@ -234,19 +261,15 @@ class EmbeddingBatchClient:
         metadata_columns: list[str], append_vectors: bool = False
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         data_list = self.__create_documents_from_dataframe__(df, content_column, source_id_column, category_column, metadata_columns)
         await self.update(data_list, append_vectors)
     
     async def unload_documents_to_excel(
         self, file_path: str,
-        tags: dict[str, Any] ={}
+        condition: ConditionContainer = ConditionContainer()
     ):
-        # tagからConditionContainerを作成
-        condition = ConditionContainer()
-        for key, values in tags.items():
-            condition.add_in_condition(key, values)
-        _, documents = await self.embedding_client.get_documents(condition=condition)
+        _, documents = await self.embedding_client.metadata_search(condition=condition)
         keys = set()
         source_id_key = self.embedding_client.config.source_id_key
         source_content_key = self.embedding_client.config.source_content_key
@@ -317,7 +340,7 @@ class CategoryBatchClient:
         metadata_columns: list[str]
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         category_list: list[CategoryData] = []
         for _, row in df.iterrows():
             name = row.get(name_column, "")
@@ -366,7 +389,7 @@ class CategoryBatchClient:
         self, file_path: str, name_column: str
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         name_list: list[str] = []
         if name_column in df.columns:
             name_list = df[name_column].astype(str).tolist()
@@ -418,7 +441,7 @@ class RelationBatchClient:
         metadata_columns: list[str]
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         relation_list: list[RelationData] = []
         for _, row in df.iterrows():
             from_node = row.get(from_node_column, "")
@@ -464,7 +487,7 @@ class RelationBatchClient:
         self, file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         relation_list: list[RelationData] = []
         for _, row in df.iterrows():
             from_node = row.get(from_node_column, "")
@@ -483,7 +506,7 @@ class TagBatchClient:
         self, file_path: str, name_column: str
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         name_list: list[str] = []
         if name_column in df.columns:
             name_list = df[name_column].astype(str).tolist()
@@ -507,7 +530,7 @@ class TagBatchClient:
         self, file_path: str, name_column: str, description_column: str, metadata_columns: list[str]
     ):
         df = pd.read_excel(file_path, dtype=str, na_values=[])
-        df.replace(to_replace=r"_x000D_", value="", regex=True, inplace=True)
+        df = _remove_excel_x000d_artifact(df)
         tag_list: list[TagData] = []
         for _, row in df.iterrows():
             name = row.get(name_column, "")

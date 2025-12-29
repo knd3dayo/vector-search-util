@@ -8,441 +8,182 @@ from vector_search_util.model import (
     EmbeddingConfig, ConditionContainer, SourceDocumentData, CategoryData, RelationData, TagData
 )
 
+import vector_search_util.core.app as app_module
+
+
 app = FastAPI()
 router = APIRouter()
 
 # vector searchでLangChainのDocumentsを返すAPI
-@router.get("/vector_search_langchain_documents")
-async def vector_search_langchain_documents(
-    query: Annotated[str, "The search query string."],
-    category: Annotated[str, "The category to filter the search by."] = "",
-    filter: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer(),
-    num_results: Annotated[int, "The number of results to return."] = 5,
-) -> list[Document]:
-    
-    """Perform a vector search in the vector database and return Langchain Documents.
+router.add_api_route(
+    path="/vector_search_langchain_documents", 
+    endpoint=app_module.vector_search_langchain_documents, 
+    methods=["GET"])
 
-    Args:
-        query (str): The search query string.
-        category (str | None): The category to filter the search by.
-        filter (ConditionContainer): A dictionary of tags to filter the search by.
-        num_results (int): The number of results to return.
-
-    Returns:
-        list: A list of Langchain Documents as search results.
-    """
-    embedding_client = EmbeddingClient()
-    results = await embedding_client.vector_search_langchain_documents(query, category, filter, num_results)
-    return results
-
-@router.get("/get_langchain_documents")
-async def get_langchain_documents(
-    source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
-    category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
-    filter: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
-) -> list[Document]:
-    embedding_client = EmbeddingClient()
-    _, documents = await embedding_client.get_langchain_documents(source_ids, category_ids, filter)
-    return documents
+router.add_api_route(
+    path="/get_langchain_documents", 
+    endpoint=app_module.get_langchain_documents, 
+    methods=["GET"])
 
 
-@router.get("/vector_search")
-async def vector_search(
-    query: Annotated[str, "The search query string."],
-    category: Annotated[str, "The category to filter the search by."] = "",
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer(),
-    num_results: Annotated[int, "The number of results to return."] = 5,
-) -> list[SourceDocumentData]:
-    
-    """Perform a vector search in the vector database.
+router.add_api_route(
+    path="/metadata_search",
+    endpoint=app_module.metadata_search,
+    methods=["GET"])
 
-    Args:
-        query (str): The search query string.
-        category (str | None): The category to filter the search by.
-        filter (ConditionContainer): A dictionary of tags to filter the search by.
-        num_results (int): The number of results to return.
 
-    Returns:
-        list: A list of search results.
-    """
-    embedding_client = EmbeddingClient()
-    results = await embedding_client.vector_search(query, category, conditions, num_results)
-    return results
+router.add_api_route(
+    path="/vector_search",
+    endpoint=app_module.vector_search,
+    methods=["GET"])
 
 # get documents
-@router.get("/get_documents")
-async def get_documents(
-    source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
-    category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
-) -> list[SourceDocumentData]:
-    """Retrieve documents from the vector database based on a list of source IDs.
-
-    Args:
-        source_ids (list[str]): A list of source IDs of documents to retrieve.
-        category_ids (list[str]): A list of category IDs to filter documents by.
-        filter (ConditionContainer): A dictionary of tags to filter documents by.
-    Returns:
-        list[EmbeddingData]: A list of documents retrieved from the vector database.
-    """
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    _, documents = await embedding_client.get_documents(source_ids, category_ids, conditions)
-    return documents
+router.add_api_route(
+    path="/get_documents",
+    endpoint=app_module.get_documents,
+    methods=["GET"])
 
 # upsert documents
-@router.post("/upsert_documents")
-async def upsert_documents(
-    data_list: Annotated[list[SourceDocumentData], "A list of documents to update embeddings for."]
-):
-    """Update embeddings for a list of documents in the vector database.
-
-    Args:
-        data_list (list[SourceDocumentData]): A list of documents to update embeddings for.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.upsert_documents(data_list)
+router.add_api_route(
+    path="/upsert_documents",
+    endpoint=app_module.upsert_documents,
+    methods=["POST"])
 
 # delete documents
-@router.delete("/delete_documents")
-async def delete_documents(
-    source_id_list: Annotated[list[str], "A list of source IDs of documents to delete."],
-    filter: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
-):
-    """Delete documents from the vector database based on a list of source IDs.
-
-    Args:
-        source_id_list (list[str]): A list of source IDs of documents to delete.
-        filter (ConditionContainer): A dictionary of tags to filter documents by.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.delete_documents_by_source_ids(source_id_list, filter)
+router.add_api_route(
+    path="/delete_documents",
+    endpoint=app_module.delete_documents,
+    methods=["DELETE"])
 
 # get categories
-@router.get("/get_categories")
-async def get_categories(
-    name_list: Annotated[list[str], "A list of category names to retrieve."] = [],
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter categories by. "] = ConditionContainer(),
-) -> list[CategoryData]:
-    """Retrieve categories from the vector database.
-
-    Args:
-        name_list (list[str]): A list of category names to retrieve.
-    Returns:
-        list[CategoryData]: A list of categories retrieved from the vector database.
-    """
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    categories = await embedding_client.get_categories(name_list, conditions)
-    return categories
+router.add_api_route(
+    path="/get_categories",
+    endpoint=app_module.get_categories,
+    methods=["GET"])
 
 # upsert categories
-@router.post("/upsert_categories")
-async def upsert_categories(
-    categories: Annotated[list[CategoryData], "The list of categories to update."],
-):
-    """Update a category in the vector database.
-
-    Args:
-        categories (list[CategoryData]): The list of categories to update.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.upsert_categories(categories)    
+router.add_api_route(
+    path="/upsert_categories",
+    endpoint=app_module.upsert_categories,
+    methods=["POST"])
 
 # delete category
-@router.delete("/delete_categories")
-async def delete_categories(
-    name_list: Annotated[list[str], "The list of category names to delete."],
-):
-    """Delete categories from the vector database based on a list of category names.
-
-    Args:
-        name_list (list[str]): The list of category names to delete.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.delete_categories(name_list)
+router.add_api_route(
+    path="/delete_categories",
+    endpoint=app_module.delete_categories,
+    methods=["DELETE"])
 
 # get relations
-@router.get("/get_relations")
-async def get_relations(
-    from_nodes: Annotated[list[str], "A list of source node IDs to filter relations by."] = [],
-    to_nodes: Annotated[list[str], "A list of target node IDs to filter relations by."] = [],
-    edge_types: Annotated[list[str], "A list of edge types to filter relations by."] = [],
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter relations by. "] = ConditionContainer()
-    ) -> list[RelationData]:
-    """Retrieve relations from the vector database.
-
-    Returns:
-        list[RelationData]: A list of relations retrieved from the vector database.
-    """
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    relations = await embedding_client.get_relations(from_nodes, to_nodes, edge_types, conditions)
-    return relations
+router.add_api_route(
+    path="/get_relations",
+    endpoint=app_module.get_relations,
+    methods=["GET"])
 
 # upsert relations
-@router.post("/upsert_relations")
-async def upsert_relations(
-    relations: Annotated[list[RelationData], "The list of relations to upsert."],
-):
-    """Upsert relations in the vector database.
-
-    Args:
-        relations (list[RelationData]): The list of relations to upsert.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.upsert_relations(relations)
+router.add_api_route(
+    path="/upsert_relations",
+    endpoint=app_module.upsert_relations,
+    methods=["POST"])
 
 # delete relations
-@router.delete("/delete_relations")
-async def delete_relations(
-    relations: Annotated[list[RelationData], "The list of relations to delete."],
-):
-    """Delete relations from the vector database based on a list of relation IDs.
-
-    Args:
-        relation_ids (list[str]): The list of relation IDs to delete.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.delete_relations(relations)
+router.add_api_route(
+    path="/delete_relations",
+    endpoint=app_module.delete_relations,
+    methods=["DELETE"])
 
 # get tags
-@router.get("/get_tags")
-async def get_tags() -> list[TagData]:
-    """Retrieve tags from the vector database.
-
-    Returns:
-        list[TagData]: A list of tags retrieved from the vector database.
-    """
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    tags = await embedding_client.get_tags()
-    return tags
+router.add_api_route(
+    path="/get_tags",
+    endpoint=app_module.get_tags,
+    methods=["GET"])
 
 # upsert tags
-@router.post("/upsert_tags")
-async def upsert_tags(
-    tags: Annotated[list[TagData], "The list of tags to upsert."],
-):
-    """Upsert tags in the vector database.
-
-    Args:
-        tags (list[TagData]): The list of tags to upsert.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.upsert_tags(tags)
+router.add_api_route(
+    path="/upsert_tags",
+    endpoint=app_module.upsert_tags,
+    methods=["POST"])
 
 # delete tags
-@router.delete("/delete_tags")
-async def delete_tags(
-    name_list: Annotated[list[str], "The list of tag names to delete."],
-):
-    """Delete tags from the vector database based on a list of tag names.
+router.add_api_route(
+    path="/delete_tags",
+    endpoint=app_module.delete_tags,
+    methods=["DELETE"])
 
-    Args:
-        name_list (list[str]): The list of tag names to delete.
-    """
+router.add_api_route(
+    path="/load_documents_from_excel",
+    endpoint=app_module.load_documents_from_excel,
+    methods=["POST"])
 
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.delete_tags(name_list)
+router.add_api_route(
+    path="/unload_documents_to_excel",
+    endpoint=app_module.unload_documents_to_excel,
+    methods=["GET"])
 
-@router.post("/load_documents_from_excel")
-async def load_documents_from_excel(
-        file_path: Annotated[str, "The path to the Excel file."],
-        content_column: Annotated[str, "The name of the column containing document content."] = "content",
-        source_id_column: Annotated[str, "The name of the column containing source IDs."] = "source_id",
-        category_column: Annotated[str, "The name of the column containing categories."] = "category",
-        metadata_columns: Annotated[list[str], "A list of column names to include as metadata."] = [],
-        append_vectors: Annotated[bool, """
-                                  If True, add vectors for existing source document search. 
-                                  If the vector DB has existing documents, vectors for existing document search are added. 
-                                  If the vector DB has no existing documents, new ones are created."""] = False
-    ):
-    """Load documents from an Excel file into the vector database.
+router.add_api_route(
+    path="/delete_documents_from_excel",
+    endpoint=app_module.delete_documents_from_excel,
+    methods=["DELETE"])
 
-    Args:
-        file_path (str): The path to the Excel file.
-        content_column (str): The name of the column containing document content.
-        source_id_column (str): The name of the column containing source IDs.
-        category_column (str): The name of the column containing categories.
-        metadata_columns (list[str]): A list of column names to include as metadata.
-        append_vectors (bool): If true, add vectors for existing source document search.
-    """
+router.add_api_route(
+    path="/load_categories_from_excel",
+    endpoint=app_module.load_categories_from_excel,
+    methods=["POST"])
 
-    embedding_client = EmbeddingClient()
-    batch_client = EmbeddingBatchClient(embedding_client)
-    await batch_client.load_documents_from_excel(
-        file_path, content_column, source_id_column, category_column, metadata_columns, append_vectors
-    )
+router.add_api_route(
+    path="/unload_categories_to_excel",
+    endpoint=app_module.unload_categories_to_excel,
+    methods=["GET"])
 
-@router.get("/unload_documents_to_excel")
-async def unload_documents_to_excel(
-        file_path: Annotated[str, "The path to the output Excel file."]
-    ):
-    """Unload documents from the vector database to an Excel file.
+router.add_api_route(
+    path="/delete_category_data_from_excel",
+    endpoint=app_module.delete_category_data_from_excel,
+    methods=["DELETE"])
 
-    Args:
-        file_path (str): The path to the output Excel file.
-    """
+router.add_api_route(
+    path="/load_relations_from_excel",
+    endpoint=app_module.load_relations_from_excel,
+    methods=["POST"])
 
-    embedding_client = EmbeddingClient()
-    batch_client = EmbeddingBatchClient(embedding_client)
-    await batch_client.unload_documents_to_excel(file_path)
+router.add_api_route(
+    path="/unload_relations_to_excel",
+    endpoint=app_module.unload_relations_to_excel,
+    methods=["GET"])
 
-@router.delete("/delete_documents_from_excel")
-async def delete_documents_from_excel(
-        file_path: Annotated[str, "The path to the Excel file."],
-        source_id_column: Annotated[str, "The name of the column containing source IDs."] = "source_id",
-        category_column: Annotated[str, "The name of the column containing categories."] = "category",
-        metadata_columns: Annotated[dict[str, list[str]], "A list of column names to include as metadata."] = {}
-    ):
-    """Delete documents from the vector database based on an Excel file.
+router.add_api_route(
+    path="/delete_relations_from_excel",
+    endpoint=app_module.delete_relations_from_excel,
+    methods=["DELETE"])
 
-    Args:
-        file_path (str): The path to the Excel file.
-        source_id_column (str): The name of the column containing source IDs.
-        category_column (str): The name of the column containing categories.
-        metadata_columns (list[str]): A list of column names to include as metadata.
-    """
+router.add_api_route(
+    path="/load_tags_from_excel",
+    endpoint=app_module.load_tags_from_excel,
+    methods=["POST"])
 
-    embedding_client = EmbeddingClient()
-    batch_client = EmbeddingBatchClient(embedding_client)
-    await batch_client.delete_documents_from_excel(
-        file_path, source_id_column, category_column, metadata_columns
-    )
+router.add_api_route(
+    path="/unload_tags_to_excel",
+    endpoint=app_module.unload_tags_to_excel,
+    methods=["GET"])
 
-@router.post("/load_categories_from_excel")
-async def load_categories_from_excel(
-        input_file_path: str, name_column: str, description_column: str, metadata_columns: list[str] = []
-    ):
-    embedding_client = EmbeddingClient()
-    batch_client = CategoryBatchClient(embedding_client)
-    
-    await batch_client.load_category_data_from_excel(
-        input_file_path, name_column, description_column, metadata_columns
-    )
 
-@router.get("/unload_categories_to_excel")
-async def unload_categories_to_excel(output_file: str):
+router.add_api_route(
+    path="/delete_tags_from_excel",
+    endpoint=app_module.delete_tags_from_excel,
+    methods=["DELETE"])
 
-    embedding_client = EmbeddingClient()
-    batch_client = CategoryBatchClient(embedding_client)
-    await batch_client.unload_category_data_to_excel(output_file)
+router.add_api_route(
+    path="/get_conditions",
+    endpoint=app_module.get_conditions,
+    methods=["GET"])
 
-@router.delete("/delete_category_data_from_excel")
-async def delete_category_data_from_excel(input_file_path: str, name_column: str):
-    embedding_client = EmbeddingClient()
-    batch_client = CategoryBatchClient(embedding_client)
-    await batch_client.delete_category_data_from_excel(input_file_path, name_column)
+router.add_api_route(
+    path="/upsert_conditions",
+    endpoint=app_module.upsert_conditions,
+    methods=["POST"])
 
-@router.post("/load_relations_from_excel")
-async def load_relations_from_excel(
-    input_file_path: str, 
-    from_node_column: str, 
-    to_node_column: str, 
-    edge_type_column: str, 
-    metadata_columns: list[str] = []
-    ):
-    embedding_client = EmbeddingClient()
-    batch_client = RelationBatchClient(embedding_client)
-    
-    await batch_client.load_relation_data_from_excel(
-        input_file_path, from_node_column, to_node_column, edge_type_column, metadata_columns
-    )
-@router.get("/unload_relations_to_excel")
-async def unload_relations_to_excel(output_file: str):
-
-    embedding_client = EmbeddingClient()
-    batch_client = RelationBatchClient(embedding_client)
-    await batch_client.unload_relation_data_to_excel(output_file)
-
-@router.delete("/delete_relations_from_excel")
-async def delete_relations_from_excel(input_file_path: str, from_node_column: str, to_node_column: str, edge_type_column: str):
-    embedding_client = EmbeddingClient()
-    batch_client = RelationBatchClient(embedding_client)
-    await batch_client.delete_relation_data_from_excel(input_file_path, from_node_column, to_node_column, edge_type_column)
-
-@router.post("/load_tags_from_excel")
-async def load_tags_from_excel(input_file_path, name_column, description_column, metadata_columns: list[str] = []):
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    batch_client = TagBatchClient(embedding_client)
-    
-    await batch_client.load_tag_data_from_excel(
-        input_file_path, name_column, description_column, metadata_columns
-    )
-
-@router.get("/unload_tags_to_excel")
-async def unload_tags_to_excel(output_file: str):
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    batch_client = TagBatchClient(embedding_client)
-    await batch_client.unload_tag_data_to_excel(output_file)
-
-@router.delete("/delete_tags_from_excel")
-async def delete_tags_from_excel(input_file_path: str, name_column: str):
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    batch_client = TagBatchClient(embedding_client)
-    await batch_client.delete_tag_data_from_excel(input_file_path, name_column)
-
-@router.get("/get_conditions")
-async def get_conditions(name_list: list[str] = []) -> list[ConditionContainer]:
-    """Retrieve conditions from the vector database.
-
-    Returns:
-        list[ConditionContainer]: A list of conditions retrieved from the vector database.
-    """
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    conditions = await embedding_client.get_conditions(name_list)
-    return conditions
-
-@router.post("/upsert_conditions")
-async def upsert_conditions(
-    conditions: Annotated[list[ConditionContainer], "The list of conditions to upsert."],
-):
-    """Upsert conditions in the vector database.
-
-    Args:
-        conditions (list[ConditionContainer]): The list of conditions to upsert.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.upsert_conditions(conditions)
-
-@router.delete("/delete_conditions")
-async def delete_conditions(
-    name_list: Annotated[list[str], "The list of condition names to delete."],
-):
-    """Delete conditions from the vector database based on a list of condition names.
-
-    Args:
-        name_list (list[str]): The list of condition names to delete.
-    """
-
-    config = EmbeddingConfig()
-    embedding_client = EmbeddingClient(config)
-    await embedding_client.delete_conditions(name_list) 
-
+router.add_api_route(
+    path="/delete_conditions",
+    endpoint=app_module.delete_conditions,
+    methods=["DELETE"])
 
 app.include_router(router, prefix="/api/vector_search_util")
 

@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import os, json
 from dotenv import load_dotenv
 from datetime import datetime
+from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
-from typing import Optional, ClassVar, Any, Callable
+
+from typing import Optional, ClassVar, Any, Callable, Sequence, Union, Literal, Annotated, TypeAlias
 from datetime import datetime, timezone
 from langchain_core.documents import Document
 
@@ -179,9 +183,6 @@ class SourceDocumentData(BaseModel):
         )
         return data
 
-from abc import ABC, abstractmethod
-from typing import Union, Literal, Annotated, Any
-from pydantic import BaseModel, Field
 
 class Condition(ABC, BaseModel):
     """Base class for all conditions."""
@@ -189,7 +190,23 @@ class Condition(ABC, BaseModel):
     def build(self):
         raise NotImplementedError
 
+
+# Discriminated union for OpenAPI (oneOf + discriminator)
+ConditionSpec: TypeAlias = Annotated[
+    Union[
+        "EqCondition",
+        "InCondition",
+        "ContainsCondition",
+        "CompareCondition",
+        "AndCondition",
+        "OrCondition",
+        "NotCondition",
+    ],
+    Field(discriminator="type"),
+]
+
 class EqCondition(Condition):
+    type: Literal["eq"] = "eq"
     field: str = Field(..., description="The field to compare.")
     value: Any = Field(..., description="The value to compare against.")
 
@@ -198,6 +215,7 @@ class EqCondition(Condition):
 
 
 class InCondition(Condition):
+    type: Literal["in"] = "in"
     field: str = Field(..., description="The field to compare.")
     values: list[Any] = Field(..., description="The list of values to compare against.")
 
@@ -207,6 +225,7 @@ class InCondition(Condition):
 
 class ContainsCondition(Condition):
     """MongoDB の部分一致（正規表現）"""
+    type: Literal["contains"] = "contains"
     field: str = Field(..., description="The field to compare.")
     substring: str = Field(..., description="The substring to search for.")
 
@@ -219,6 +238,7 @@ class ContainsCondition(Condition):
 # -------------------------
 
 class CompareCondition(Condition):
+    type: Literal["compare"] = "compare"
     field: str = Field(..., description="The field to compare.")
     operator: str = Field(..., description="The comparison operator.")
     value: Any = Field(..., description="The value to compare against.")
@@ -231,21 +251,24 @@ class CompareCondition(Condition):
 # -------------------------
 
 class AndCondition(Condition):
-    conditions: list[Condition] = Field(..., description="List of conditions")
+    type: Literal["and"] = "and"
+    conditions: list[ConditionSpec] = Field(..., description="List of conditions")
 
     def build(self):
         return {"$and": [c.build() for c in self.conditions]}
 
 
 class OrCondition(Condition):
-    conditions: list[Condition] = Field(..., description="List of conditions")
+    type: Literal["or"] = "or"
+    conditions: list[ConditionSpec] = Field(..., description="List of conditions")
 
     def build(self):
         return {"$or": [c.build() for c in self.conditions]}
 
 
 class NotCondition(Condition):
-    condition: Condition = Field(..., description="The condition to negate")
+    type: Literal["not"] = "not"
+    condition: ConditionSpec = Field(..., description="The condition to negate")
 
     def build(self):
         # NOT は {field: {"$not": {...}}} の形にする必要がある
@@ -259,12 +282,81 @@ class NotCondition(Condition):
 import uuid
 class ConditionContainer(BaseModel):
     name: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Name of the condition container")
-    conditions: list[
-        Union[
-            EqCondition, InCondition, ContainsCondition, CompareCondition, AndCondition, OrCondition, NotCondition
-            ]
-        ] = Field(default_factory=list, description="List of conditions")
+    conditions: list[ConditionSpec] = Field(default_factory=list, description="List of conditions")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata for the condition container")
+
+    
+    # 各種条件オブジェクトを生成するメソッド
+    @classmethod
+    def create_eq_condition(cls, field: str, value: Any) -> EqCondition:
+        return EqCondition(field=field, value=value)
+    @classmethod
+    def create_in_condition(cls, field: str, values: list[Any]) -> InCondition:
+        return InCondition(field=field, values=values)
+    @classmethod
+    def create_contains_condition(cls, field: str, substring: str) -> ContainsCondition:
+        return ContainsCondition(field=field, substring=substring)
+
+    @classmethod
+    def create_compare_condition(cls, field: str, operator: str, value: Any) -> CompareCondition:
+        return CompareCondition(field=field, operator=operator, value=value)
+    
+    @classmethod
+    def create_gte_condition(cls, field: str, value: Any) -> CompareCondition:
+        return CompareCondition(field=field, operator="$gte", value=value)
+    @classmethod
+    def create_lte_condition(cls, field: str, value: Any) -> CompareCondition:
+        return CompareCondition(field=field, operator="$lte", value=value)
+    @classmethod
+    def create_gt_condition(cls, field: str, value: Any) -> CompareCondition:
+        return CompareCondition(field=field, operator="$gt", value=value)
+    @classmethod
+    def create_lt_condition(cls, field: str, value: Any) -> CompareCondition:
+        return CompareCondition(field=field, operator="$lt", value=value)
+    @classmethod
+    def create_and_condition(cls, conditions: Sequence[ConditionSpec]) -> AndCondition:
+        return AndCondition(conditions=list(conditions))
+    @classmethod
+    def create_or_condition(cls, conditions: Sequence[ConditionSpec]) -> OrCondition:
+        return OrCondition(conditions=list(conditions))
+    @classmethod
+    def create_not_condition(cls, condition: ConditionSpec) -> NotCondition:
+        return NotCondition(condition=condition)
+    # --- dictからConditionContainer生成 ---
+    ## { key: value, key2: { $gte: value2 }, $and: [ ... ] } のようなMongoDB風のdictからConditionContainerを生成する
+    @classmethod
+    def from_dict(cls, condition_dict: dict) -> "ConditionContainer":
+        container = ConditionContainer()
+        if not condition_dict:
+            return container
+
+        def parse_condition(d: dict) -> ConditionSpec:
+            if "$and" in d:
+                sub_conditions: list[ConditionSpec] = [parse_condition(c) for c in d["$and"]]
+                return cls.create_and_condition(conditions=sub_conditions)
+            elif "$or" in d:
+                sub_conditions: list[ConditionSpec] = [parse_condition(c) for c in d["$or"]]
+                return cls.create_or_condition(conditions=sub_conditions)
+            elif "$not" in d:
+                sub_condition: ConditionSpec = parse_condition(d["$not"])
+                return cls.create_not_condition(condition=sub_condition)
+            else:
+                # フィールドごとの条件解析
+                field, expr = list(d.items())[0]
+                if isinstance(expr, dict):
+                    if "$in" in expr:
+                        return cls.create_in_condition(field=field, values=expr["$in"])
+                    if "$regex" in expr:
+                        return cls.create_contains_condition(field=field, substring=expr["$regex"])
+                    for op in ["$gte", "$lte", "$gt", "$lt"]:
+                        if op in expr:
+                            return cls.create_compare_condition(field=field, operator=op, value=expr[op])
+                # eq
+                return cls.create_eq_condition(field=field, value=expr)
+
+        condition = parse_condition(condition_dict)
+        container.conditions.append(condition)
+        return container
 
     # --- 基本条件 ---
     def add_eq_condition(self, field, value):
@@ -297,15 +389,15 @@ class ConditionContainer(BaseModel):
         return self
 
     # --- 論理条件 ---
-    def add_and_condition(self, conditions):
-        self.conditions.append(AndCondition(conditions=conditions))
+    def add_and_condition(self, conditions: Sequence[ConditionSpec]):
+        self.conditions.append(AndCondition(conditions=list(conditions)))
         return self
 
-    def add_or_condition(self, conditions):
-        self.conditions.append(OrCondition(conditions=conditions))
+    def add_or_condition(self, conditions: Sequence[ConditionSpec]):
+        self.conditions.append(OrCondition(conditions=list(conditions)))
         return self
 
-    def add_not_condition(self, condition):
+    def add_not_condition(self, condition: ConditionSpec):
         self.conditions.append(NotCondition(condition=condition))
         return self
 
@@ -332,25 +424,64 @@ class ConditionContainer(BaseModel):
 
         translator = SqliteJsonTranslator()
         return translator.translate(self.build())
-    
-class PostgresJsonbTranslator:
-    def translate(self, condition_dict, json_field: str = "cmetadata"):
-        return self._translate_dict(condition_dict, json_field)
 
-    def _translate_dict(self, d, json_field):
-        clauses = []
+
+# Resolve forward refs for discriminated union / recursive models (Pydantic v1/v2)
+def _rebuild_condition_models() -> None:
+    models = [
+        EqCondition,
+        InCondition,
+        ContainsCondition,
+        CompareCondition,
+        AndCondition,
+        OrCondition,
+        NotCondition,
+        ConditionContainer,
+    ]
+    for m in models:
+        if hasattr(m, "model_rebuild"):
+            m.model_rebuild()
+        elif hasattr(m, "update_forward_refs"):
+            m.update_forward_refs()
+
+
+_rebuild_condition_models()
+
+class ConditionTranslator(ABC):
+
+    @abstractmethod
+    def _translate_dict(self, d: dict) -> str:
+        raise NotImplementedError
+    
+    def _translate_field(self, field: str, expr: Any) -> str:
+        raise NotImplementedError
+    
+
+class PostgresJsonbTranslator(ConditionTranslator):
+    def __init__(self, json_field: str = "cmetadata"):
+        self.json_field = json_field
+
+    def translate(self, condition_dict, json_field: str | None = None):
+        if json_field is not None:
+            self.json_field = json_field
+        return self._translate_dict(condition_dict)
+
+    def _translate_dict(self, d) -> str:
+        clauses: list[str] = []
         for key, value in d.items():
             if key == "$and":
-                sub = [self._translate_dict(v, json_field) for v in value]
+                sub = [self._translate_dict(v) for v in value]
                 clauses.append("(" + " AND ".join(sub) + ")")
             elif key == "$or":
-                sub = [self._translate_dict(v, json_field) for v in value]
+                sub = [self._translate_dict(v) for v in value]
                 clauses.append("(" + " OR ".join(sub) + ")")
             else:
-                clauses.append(self._translate_field(key, value, json_field))
+                clauses.append(self._translate_field(key, value))
         return " AND ".join(clauses)
 
-    def _translate_field(self, field, expr, json_field):
+    def _translate_field(self, field: str, expr: Any) -> str:
+        json_field = self.json_field
+
         if isinstance(expr, dict):
             if "$in" in expr:
                 vals = ",".join([f"'{v}'" for v in expr["$in"]])
@@ -372,14 +503,14 @@ class PostgresJsonbTranslator:
                 return f"({json_field}->>'{field}')::numeric < {expr['$lt']}"
 
             if "$not" in expr:
-                inner = self._translate_field(field, expr["$not"], json_field)
+                inner = self._translate_field(field, expr["$not"])
                 return f"NOT ({inner})"
 
         # eq
         return f"({json_field}->>'{field}') = '{expr}'"
 
 
-class SqliteJsonTranslator:
+class SqliteJsonTranslator(ConditionTranslator):
     """SQLite3向け（JSON1拡張）WHERE句生成。
 
     - json_extract(json_field, '$.key') を使ってJSONから値を取り出す
@@ -387,40 +518,27 @@ class SqliteJsonTranslator:
 
     NOTE: 既存のPostgresJsonbTranslatorと同様、現状はSQL文字列を直接生成します。
     """
+    def __init__(self):
+        self.json_field = "cmetadata"
 
-    def translate(self, condition_dict, json_field: str = "cmetadata") -> str:
-        return self._translate_dict(condition_dict, json_field)
+    def translate(self, condition_dict) -> str:
+        return self._translate_dict(condition_dict)
 
-    def _translate_dict(self, d, json_field: str) -> str:
+    def _translate_dict(self, d) -> str:
         clauses: list[str] = []
         for key, value in d.items():
             if key == "$and":
-                sub = [self._translate_dict(v, json_field) for v in value]
+                sub = [self._translate_dict(v) for v in value]
                 clauses.append("(" + " AND ".join(sub) + ")")
             elif key == "$or":
-                sub = [self._translate_dict(v, json_field) for v in value]
+                sub = [self._translate_dict(v) for v in value]
                 clauses.append("(" + " OR ".join(sub) + ")")
             else:
-                clauses.append(self._translate_field(key, value, json_field))
+                clauses.append(self._translate_field(key, value))
         return " AND ".join(clauses)
 
-    def _json_extract(self, json_field: str, field: str) -> str:
-        # fieldにクォートが必要なケース（記号など）がある場合はここを拡張
-        return f"json_extract({json_field}, '$.{field}')"
-
-    def _sql_literal(self, v: Any) -> str:
-        if v is None:
-            return "NULL"
-        if isinstance(v, bool):
-            return "1" if v else "0"
-        if isinstance(v, (int, float)):
-            return str(v)
-        # string/その他
-        s = str(v).replace("'", "''")
-        return f"'{s}'"
-
-    def _translate_field(self, field: str, expr: Any, json_field: str) -> str:
-        extracted = self._json_extract(json_field, field)
+    def _translate_field(self, field: str, expr: Any) -> str:
+        extracted = self._json_extract(field)
 
         if isinstance(expr, dict):
             if "$in" in expr:
@@ -447,10 +565,26 @@ class SqliteJsonTranslator:
                 return f"CAST({extracted} AS REAL) < {self._sql_literal(expr['$lt'])}"
 
             if "$not" in expr:
-                inner = self._translate_field(field, expr["$not"], json_field)
+                inner = self._translate_field(field, expr["$not"])
                 return f"NOT ({inner})"
 
         # eq
         if expr is None:
             return f"{extracted} IS NULL"
         return f"{extracted} = {self._sql_literal(expr)}"
+
+    def _json_extract(self, field: str) -> str:
+        # fieldにクォートが必要なケース（記号など）がある場合はここを拡張
+        return f"json_extract({self.json_field}, '$.{field}')"
+
+    def _sql_literal(self, v: Any) -> str:
+        if v is None:
+            return "NULL"
+        if isinstance(v, bool):
+            return "1" if v else "0"
+        if isinstance(v, (int, float)):
+            return str(v)
+        # string/その他
+        s = str(v).replace("'", "''")
+        return f"'{s}'"
+
