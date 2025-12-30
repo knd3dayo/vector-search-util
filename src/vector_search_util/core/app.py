@@ -1,5 +1,4 @@
-from typing import Annotated
-from fastapi import FastAPI, APIRouter
+from typing import Annotated, Optional
 from langchain_core.documents import Document
 from vector_search_util.core.client import (
     EmbeddingClient, EmbeddingBatchClient, RelationBatchClient, CategoryBatchClient, TagBatchClient
@@ -10,88 +9,125 @@ from vector_search_util.model import (
 
 async def vector_search_langchain_documents(
     query: Annotated[str, "The search query string."],
-    category: Annotated[str, "The category to filter the search by."] = "",
-    filter: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer(),
-    num_results: Annotated[int, "The number of results to return."] = 5,
+    category: Annotated[Optional[str], "The category to filter the search by."] = "",
+    conditions: Annotated[Optional[ConditionContainer], "A dictionary of tags to filter the search by. "] = ConditionContainer(),
+    num_results: Annotated[Optional[int], "The number of results to return."] = 5,
 ) -> list[Document]:
     
     """Perform a vector search in the vector database and return Langchain Documents.
 
     Args:
-        query (str): The search query string.
-        category (str | None): The category to filter the search by.
-        filter (ConditionContainer): A dictionary of tags to filter the search by.
-        num_results (int): The number of results to return.
+        query (Optional[str]): The search query string.
+        category (Optional[str]): The category to filter the search by.
+        conditions (Optional[ConditionContainer]): A dictionary of tags to filter the search by.
+        num_results (Optional[int]): The number of results to return.
 
     Returns:
         list: A list of Langchain Documents as search results.
     """
     embedding_client = EmbeddingClient()
-    results = await embedding_client.vector_search_langchain_documents(query, category, filter, num_results)
+    if category is None:
+        category = ""
+    if not conditions:
+        conditions = ConditionContainer()
+    if not num_results:
+        num_results = 5
+    results = await embedding_client.vector_search_langchain_documents(query, category, conditions, num_results)
     return results
 
 async def get_langchain_documents(
-    source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
-    category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
-    filter: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
+    source_ids: Annotated[Optional[list[str]], "A list of source IDs of documents to retrieve."] = [],
+    category_ids: Annotated[Optional[list[str]], "A list of category IDs to filter documents by."] = [],
+    conditions: Annotated[Optional[ConditionContainer], "A dictionary of tags to filter documents by. "] = ConditionContainer(),
 ) -> list[Document]:
+    """Retrieve Langchain Documents from the vector database based on a list of source IDs.
+    Args:
+        source_ids (Optional[list[str]]): A list of source IDs of documents to retrieve.
+        category_ids (Optional[list[str]]): A list of category IDs to filter documents by.
+        conditions (Optional[ConditionContainer]): A dictionary of tags to filter documents by.
+    Returns:
+        list[Document]: A list of Langchain Documents retrieved from the vector database.
+    """
+
     embedding_client = EmbeddingClient()
-    _, documents = await embedding_client.get_langchain_documents(source_ids, category_ids, filter)
+    if not source_ids:
+        source_ids = []
+    if not category_ids:
+        category_ids = []
+    if not conditions:
+        conditions = ConditionContainer()
+    _, documents = await embedding_client.get_langchain_documents(source_ids, category_ids, conditions)
     return documents
 
 async def metadata_search(
-        conditions: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer()
+        conditions: Annotated[Optional[ConditionContainer], "A dictionary of tags to filter the search by. "] = ConditionContainer()
     ) -> list[SourceDocumentData]:
     """Perform a metadata search in the vector database.
 
     Args:
-        filter (ConditionContainer): A dictionary of tags to filter the search by.
+        conditions (Optional[ConditionContainer]): A dictionary of tags to filter the search by.
     Returns:
         list: A list of search results.
     """
     embedding_client = EmbeddingClient()
+    if not conditions:
+        conditions = ConditionContainer()
     _, results =  await embedding_client.metadata_search(conditions)
     return results
 
 async def vector_search(
     query: Annotated[str, "The search query string."],
-    category: Annotated[str, "The category to filter the search by."] = "",
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter the search by. "] = ConditionContainer(),
-    num_results: Annotated[int, "The number of results to return."] = 5,
+    category: Annotated[Optional[str], "The category to filter the search by."] = "",
+    conditions: Annotated[Optional[ConditionContainer], "A dictionary of tags to filter the search by. "] = ConditionContainer(),
+    num_results: Annotated[Optional[int], "The number of results to return."] = 5,
+
 ) -> list[SourceDocumentData]:
     
     """Perform a vector search in the vector database.
 
     Args:
-        query (str): The search query string.
-        category (str | None): The category to filter the search by.
-        filter (ConditionContainer): A dictionary of tags to filter the search by.
-        num_results (int): The number of results to return.
+        query (Optional[str]): The search query string.
+        category (Optional[str]): The category to filter the search by.
+        filter (Optional[ConditionContainer]): A dictionary of tags to filter the search by.
+        num_results (Optional[int]): The number of results to return.
 
     Returns:
         list: A list of search results.
     """
     embedding_client = EmbeddingClient()
+    if category is None:
+        category = ""
+    if not conditions:
+        conditions = ConditionContainer()
+    if not num_results:
+        num_results = 5
+
     results = await embedding_client.vector_search(query, category, conditions, num_results)
     return results
 
 # get documents
 async def get_documents(
-    source_ids: Annotated[list[str], "A list of source IDs of documents to retrieve."] = [],
-    category_ids: Annotated[list[str], "A list of category IDs to filter documents by."] = [],
-    conditions: Annotated[ConditionContainer, "A dictionary of tags to filter documents by. "] = ConditionContainer(),
+    source_ids: Annotated[Optional[list[str]], "A list of source IDs of documents to retrieve."] = [],
+    category_ids: Annotated[Optional[list[str]], "A list of category IDs to filter documents by."] = [],
+    conditions: Annotated[Optional[ConditionContainer], "A dictionary of tags to filter documents by. "] = ConditionContainer(),
 ) -> list[SourceDocumentData]:
     """Retrieve documents from the vector database based on a list of source IDs.
 
     Args:
-        source_ids (list[str]): A list of source IDs of documents to retrieve.
-        category_ids (list[str]): A list of category IDs to filter documents by.
-        filter (ConditionContainer): A dictionary of tags to filter documents by.
+        source_ids (Optional[list[str]]): A list of source IDs of documents to retrieve.
+        category_ids (Optional[list[str]]): A list of category IDs to filter documents by.
+        filter (Optional[ConditionContainer]): A dictionary of tags to filter documents by.
     Returns:
         list[EmbeddingData]: A list of documents retrieved from the vector database.
     """
     config = EmbeddingConfig()
     embedding_client = EmbeddingClient(config)
+    if not source_ids:
+        source_ids = []
+    if not category_ids:
+        category_ids = []
+    if not conditions:
+        conditions = ConditionContainer()
     _, documents = await embedding_client.get_documents(source_ids, category_ids, conditions)
     return documents
 
